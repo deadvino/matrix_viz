@@ -1,0 +1,513 @@
+use eframe::egui;
+use nalgebra::{Matrix3, Vector3};
+
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "3D Matrix Visualizer - Full CAD Edition",
+        options,
+        Box::new(|_cc| Box::new(MatrixApp::default())),
+    )
+}
+
+struct MatrixApp {
+    current: Matrix3<f32>,
+    start: Matrix3<f32>,
+    target: Matrix3<f32>,
+    anim_t: f32,
+    animating: bool,
+    input: [[f32; 3]; 3],
+    input_buffer: String,
+    selected_vector: Vector3<f32>,
+    history: Vec<Matrix3<f32>>,
+    // Viewport State
+    view_rot: f32,      // Yaw
+    view_pitch: f32,    // Pitch
+    view_zoom: f32,     // Zoom level
+    click_to_place: bool,
+    show_planes: bool,
+    perspective: bool,
+    grid_size: i32,
+	grid_opacity: u8, // 0 is invisible, 255 is fully opaque
+}
+
+impl Default for MatrixApp {
+    fn default() -> Self {
+        Self {
+            current: Matrix3::identity(),
+            start: Matrix3::identity(),
+            target: Matrix3::identity(),
+            anim_t: 0.0,
+            animating: false,
+            input: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            selected_vector: Vector3::new(1.0, 1.0, 0.0),
+            history: Vec::new(),
+            view_rot: 0.5,
+            view_pitch: 0.3,
+            view_zoom: 1.0,
+            input_buffer: String::new(),
+            click_to_place: true,
+            show_planes: true,
+            perspective: true,
+            grid_size: 5,
+			grid_opacity: 30, // A nice subtle default
+        }
+    }
+}
+
+impl MatrixApp {
+    fn recalculate_target(&mut self) {
+        let mut new_target = Matrix3::identity();
+        for mat in &self.history {
+            new_target = mat * new_target;
+        }
+        self.start = self.current;
+        self.target = new_target;
+        self.anim_t = 0.0;
+        self.animating = true;
+    }
+
+
+    fn handle_buffered_input(ui: &mut egui::Ui, id: egui::Id, buffer: &mut String, val: &mut f32) {
+        let mut display_str = if ui.memory(|mem| mem.has_focus(id)) {
+            buffer.clone()
+        } else {
+            format!("{:.3}", val)
+        };
+
+        let response = ui.add(egui::TextEdit::singleline(&mut display_str).id(id).desired_width(60.0));
+
+        if response.gained_focus() {
+            *buffer = format!("{:.3}", val);
+            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
+                let c_range = egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(0),
+                    egui::text::CCursor::new(buffer.len()),
+                );
+                state.cursor.set_char_range(Some(c_range));
+                egui::TextEdit::store_state(ui.ctx(), id, state);
+            }
+        }
+
+        if response.changed() {
+            *buffer = display_str;
+            if let Ok(parsed) = buffer.parse::<f32>() {
+                *val = parsed;
+            }
+        }
+    }
+
+
+	fn swap_columns(&mut self, c1: usize, c2: usize) {
+        for r in 0..3 {
+            let temp = self.input[r][c1];
+            self.input[r][c1] = self.input[r][c2];
+            self.input[r][c2] = temp;
+        }
+        self.recalculate_target();
+    }
+
+
+	fn swap_rows(&mut self, r1: usize, r2: usize) {
+        self.input.swap(r1, r2);
+        self.recalculate_target();
+    }
+
+
+	fn transpose_input(&mut self) {
+        for r in 0..3 {
+            for c in (r + 1)..3 {
+                let temp = self.input[r][c];
+                self.input[r][c] = self.input[c][r];
+                self.input[c][r] = temp;
+            }
+        }
+        self.recalculate_target();
+    }
+
+
+	fn set_view(&mut self, yaw: f32, pitch: f32) {
+        self.view_rot = yaw;
+        self.view_pitch = pitch;
+    }
+
+
+	fn handle_hotkeys(&mut self, ctx: &egui::Context) {
+        if ctx.wants_keyboard_input() { return; }
+        let input = ctx.input(|i| i.clone());
+
+        if input.key_pressed(egui::Key::P) { self.show_planes = !self.show_planes; }
+        if input.key_pressed(egui::Key::V) { self.perspective = !self.perspective; }
+        if input.key_pressed(egui::Key::C) { self.history.clear(); self.recalculate_target(); }
+        
+        if input.key_pressed(egui::Key::A) && !self.animating {
+		    let m = Matrix3::new(
+		        self.input[0][0], self.input[0][1], self.input[0][2],
+		        self.input[1][0], self.input[1][1], self.input[1][2],
+		        self.input[2][0], self.input[2][1], self.input[2][2],
+		    );
+		    self.history.push(m);
+		    self.recalculate_target();
+		}
+		if input.key_pressed(egui::Key::Space) {
+		    if ctx.pointer_interact_pos().is_some() {
+		    self.click_to_place = true;
+		}
+}
+        
+        if input.modifiers.command && input.key_pressed(egui::Key::Z) {
+            if !self.history.is_empty() { self.history.pop(); self.recalculate_target(); }
+        }
+    }
+
+
+	fn get_view_matrix(&self) -> Matrix3<f32> {
+        let (cr, sr) = (self.view_rot.cos(), self.view_rot.sin());
+        let (cp, sp) = (self.view_pitch.cos(), self.view_pitch.sin());
+        Matrix3::new(
+            cr, 0.0, sr,
+            sr * sp, cp, -cr * sp,
+            -sr * cp, sp, cr * cp,
+        )
+    }
+
+
+	fn draw_matrix_input_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Transform Matrix");
+        ui.add_space(8.0);
+
+        egui::Grid::new("matrix_input_grid").spacing([8.0, 8.0]).show(ui, |ui| {
+            // Kolumn-bytar-knappar (Överst)
+            ui.label(""); 
+            if ui.button("⟷").on_hover_text("Byt kolumn 1 & 2").clicked() { self.swap_columns(0, 1); }
+            if ui.button("⟷").on_hover_text("Byt kolumn 2 & 3").clicked() { self.swap_columns(1, 2); }
+            ui.end_row();
+
+            for r in 0..3 {
+                for c in 0..3 {
+                    let id = ui.make_persistent_id(format!("mat_input_{}_{}", r, c));
+                    Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.input[r][c]);
+                }
+                // Rad-bytar-knappar (Till höger)
+                if r < 2 {
+                    if ui.button("↕").on_hover_text(format!("Byt rad {} & {}", r+1, r+2)).clicked() {
+                        self.swap_rows(r, r+1);
+                    }
+                }
+                ui.end_row();
+            }
+        });
+
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if ui.button("⟲ Reset").clicked() {
+                self.input = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+            }
+            if ui.button("⬈ Transpose").clicked() {
+                self.transpose_input();
+            }
+        });
+    }
+
+
+    fn draw_result_matrix(&self, ui: &mut egui::Ui) {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(15.0, 5.0);
+            for r in 0..3 {
+                ui.horizontal(|ui| {
+                    for c in 0..3 {
+                        let val = self.target[(r, c)];
+                        let color = if val.abs() < 0.001 { 
+                            egui::Color32::DARK_GRAY 
+                        } else if val > 0.0 { 
+                            egui::Color32::LIGHT_GREEN 
+                        } else { 
+                            egui::Color32::LIGHT_RED 
+                        };
+                        ui.colored_label(color, format!("{:>6.2}", val));
+                    }
+                });
+            }
+        });
+    }
+
+
+	fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>) {
+	    let center = rect.center();
+	    let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
+		
+	    // Invertera kamerans rotation för att gå från skärm -> världsrymden
+	    let inv_view = view_mat.transpose();
+		
+	    let dx = (mouse_pos.x - center.x) / base_scale;
+	    let dy = (center.y - mouse_pos.y) / base_scale;
+		
+	    // Vi skapar en vektor i kamerans plan och roterar den till världsrymden
+	    let world_dir = inv_view * Vector3::new(dx, dy, 0.0);
+		
+	    // Vi tvingar ner den på XY-planet genom att nollställa Z
+	    self.selected_vector = Vector3::new(world_dir.x, world_dir.y, 0.0);
+	}
+}
+
+
+impl eframe::App for MatrixApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.handle_hotkeys(ctx);
+        let dt = ctx.input(|i| i.unstable_dt).max(1e-6);
+
+        // --- SIDEBAR ---
+        egui::SidePanel::left("controls").width_range(300.0..=350.0).show(ctx, |ui| {
+            ui.heading("Matrix Visualizer");
+            ui.add_space(4.0);
+            
+            ui.collapsing("⌨ Hotkeys", |ui| {
+                ui.label("P: Planes | V: Persp | A: Apply\nCtrl+Z: Undo | C: Clear");
+            });
+
+            ui.separator();
+            ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
+            ui.checkbox(&mut self.show_planes, "🔳 Show Original [P]");
+            ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
+
+            ui.add_space(10.0);
+            self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
+
+            ui.separator();
+            ui.heading("Resulting M_total");
+            self.draw_result_matrix(ui); // Hjälpfunktion för att rita ut 3x3 resultatet
+            
+            ui.label(format!("Det: {:.4}", self.target.determinant()));
+
+			ui.separator();
+			ui.heading("Custom Vector (Yellow)");
+			ui.horizontal(|ui| {
+			    for i in 0..3 {
+			        let label = ["X", "Y", "Z"][i];
+			        ui.label(format!("{}:", label));
+			        let id = ui.make_persistent_id(format!("custom_vec_{}", i));
+			        Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
+			    }
+			});
+			ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
+        });
+
+        // --- VIEWPORT ---
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
+			
+            
+            // Input handling
+            if resp.dragged_by(egui::PointerButton::Primary) {
+                self.view_rot += resp.drag_delta().x * 0.01;
+                self.view_pitch = (self.view_pitch - resp.drag_delta().y * 0.01).clamp(-1.5, 1.5);
+            }
+            self.view_zoom = (self.view_zoom * (1.0 + ui.input(|i| i.smooth_scroll_delta.y) * 0.001)).clamp(0.1, 10.0);
+
+            // 1. Lyft ut variabler som closuren behöver för att undvika att låsa hela 'self'
+			let perspective_mode = self.perspective; 
+			let view_zoom = self.view_zoom;
+
+			// Setup Projection
+			let painter = ui.painter_at(rect);
+			let view_mat = self.get_view_matrix();
+			let base_scale = (rect.width().min(rect.height()) / 25.0) * view_zoom;
+
+			// Nu lånar closuren bara 'perspective_mode' och 'base_scale', inte 'self'
+			let project = |v: Vector3<f32>| {
+			    let v_v = view_mat * v;
+			    let factor = if perspective_mode { 
+			        (base_scale * 20.0) / (20.0 - v_v.z).max(0.1) 
+			    } else { 
+			        base_scale 
+			    };
+			    rect.center() + egui::vec2(v_v.x * factor, -v_v.y * factor)
+			};
+
+			// --- Hantera Space-tangenten för att placera vektorn ---
+			// Nu fungerar detta eftersom 'project' inte längre lånar 'self'
+			if ctx.input(|i| i.key_down(egui::Key::Space)) {
+			    if let Some(pos) = ctx.pointer_interact_pos() {
+			        if rect.contains(pos) {
+			            self.place_vector_at_mouse(pos, rect, view_mat);
+			        }
+			    }
+			}
+
+			
+            // Animation
+            if self.animating {
+                self.anim_t += dt / 0.8;
+                let t = smoothstep(self.anim_t.min(1.0));
+                self.current = self.start * (1.0 - t) + self.target * t;
+                if self.anim_t >= 1.0 { self.current = self.target; self.animating = false; }
+            }
+
+            // Render Scene
+            if self.show_planes { draw_origin_planes(&painter, &project, self.grid_size); }
+            
+            let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
+            draw_grid_3d(&painter, &project, &self.current, grid_c, self.grid_size);
+            
+            draw_unit_cube(&painter, &project, &self.current);
+            draw_axes_3d(&painter, &project);
+            
+            // Render Basis Vectors
+            let m = self.current;
+            let vectors = [ (m*Vector3::x(), egui::Color32::RED), (m*Vector3::y(), egui::Color32::GREEN), 
+                            (m*Vector3::z(), egui::Color32::BLUE), (m*self.selected_vector, egui::Color32::YELLOW) ];
+            
+            for (v, color) in vectors {
+                draw_arrow(&painter, project(Vector3::zeros()), project(v), color);
+            }
+
+            // UI Elements (Nav Cube)
+            draw_nav_cube(ui, &painter, &view_mat, self);
+        });
+
+        ctx.request_repaint();
+    }
+}
+
+
+// --- Helpers ---
+
+fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>) {
+    let color = egui::Color32::from_rgba_premultiplied(120, 80, 200, 30);
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgba_premultiplied(200, 150, 255, 180));
+    
+    let corners = [
+        Vector3::new(0.,0.,0.), Vector3::new(1.,0.,0.), Vector3::new(1.,1.,0.), Vector3::new(0.,1.,0.),
+        Vector3::new(0.,0.,1.), Vector3::new(1.,0.,1.), Vector3::new(1.,1.,1.), Vector3::new(0.,1.,1.),
+    ].map(|v| project(m * v));
+
+    let faces = [[0,1,2,3], [4,5,6,7], [0,4,7,3], [1,5,6,2], [0,1,5,4], [3,2,6,7]];
+
+    for face in faces {
+        painter.add(egui::Shape::convex_polygon(face.iter().map(|&i| corners[i]).collect(), color, egui::Stroke::NONE));
+    }
+    let edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    for edge in edges {
+        painter.line_segment([corners[edge[0]], corners[edge[1]]], stroke);
+    }
+}
+
+
+fn draw_grid_3d(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>, color: egui::Color32, size: i32) {
+    // Vi skapar en stroke baserat på färgen vi skickar in
+    let stroke = egui::Stroke::new(1.0, color); 
+    let s = size as f32;
+    
+    for i in -size..=size {
+        let t = i as f32;
+        // XY Plan
+        painter.line_segment([project(m * Vector3::new(t, -s, 0.0)), project(m * Vector3::new(t, s, 0.0))], stroke);
+        painter.line_segment([project(m * Vector3::new(-s, t, 0.0)), project(m * Vector3::new(s, t, 0.0))], stroke);
+        
+        // XZ Plan
+        painter.line_segment([project(m * Vector3::new(t, 0.0, -s)), project(m * Vector3::new(t, 0.0, s))], stroke);
+        painter.line_segment([project(m * Vector3::new(-s, 0.0, t)), project(m * Vector3::new(s, 0.0, t))], stroke);
+        
+        // YZ Plan
+        painter.line_segment([project(m * Vector3::new(0.0, t, -s)), project(m * Vector3::new(0.0, t, s))], stroke);
+        painter.line_segment([project(m * Vector3::new(0.0, -s, t)), project(m * Vector3::new(0.0, s, t))], stroke);
+    }
+}
+
+
+fn draw_axes_3d(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2) {
+    let s = egui::Stroke::new(1.0, egui::Color32::GRAY.linear_multiply(0.2));
+    for i in 0..3 {
+        let mut start = Vector3::zeros(); let mut end = Vector3::zeros();
+        start[i] = -10.0; end[i] = 10.0;
+        painter.line_segment([project(start), project(end)], s);
+    }
+}
+
+
+fn smoothstep(t: f32) -> f32 { t * t * (3.0 - 2.0 * t) }
+
+
+fn draw_arrow(painter: &egui::Painter, start: egui::Pos2, end: egui::Pos2, color: egui::Color32) {
+    if (start - end).length() < 1.0 { return; }
+    painter.line_segment([start, end], egui::Stroke::new(2.5, color));
+}
+
+
+fn draw_origin_planes(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, size: i32) {
+    let identity = nalgebra::Matrix3::identity();
+    // Vi använder en diskret grå färg med låg opacitet för det statiska rutnätet
+    let color = egui::Color32::from_rgba_unmultiplied(150, 150, 150, 40);
+    
+    draw_grid_3d(
+        painter, 
+        project, 
+        &identity, 
+        color, 
+        size
+    );
+}
+
+
+fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<f32>, app: &mut MatrixApp) {
+    let rect = painter.clip_rect();
+    // Placera kuben i övre högra hörnet
+    let nav_center = egui::pos2(rect.right() - 60.0, rect.top() + 60.0);
+    let nav_scale = 30.0;
+
+    // Defoniera ytorna: (Namn, Normalvektor, Yaw, Pitch)
+    let faces = [
+        ("XY ", Vector3::new(0.0, 0.0, 1.0), 0.0, 0.0),
+        ("-XY",  Vector3::new(0.0, 0.0, -1.0), std::f32::consts::PI, 0.0),
+        ("YZ ", Vector3::new(1.0, 0.0, 0.0), -std::f32::consts::FRAC_PI_2, 0.0),
+        ("-YZ",  Vector3::new(-1.0, 0.0, 0.0), std::f32::consts::FRAC_PI_2, 0.0),
+        ("XZ ",   Vector3::new(0.0, 1.0, 0.0), 0.0, std::f32::consts::FRAC_PI_2),
+        ("-XZ",Vector3::new(0.0, -1.0, 0.0), 0.0, -std::f32::consts::FRAC_PI_2),
+    ];
+
+    // Hjälpfunktion för lokal projektion av nav-kuben
+    let project_nav = |v: Vector3<f32>| {
+        let v_view = view_mat * v;
+        egui::pos2(nav_center.x + v_view.x * nav_scale, nav_center.y - v_view.y * nav_scale)
+    };
+
+    // Sortera ytor efter djup (Z i view-space) så vi ritar de bakersta först
+    let mut sorted_faces: Vec<_> = faces.iter().collect();
+    sorted_faces.sort_by(|a, b| {
+        let az = (view_mat * a.1).z;
+        let bz = (view_mat * b.1).z;
+        az.partial_cmp(&bz).unwrap()
+    });
+
+    for (name, normal, yaw, pitch) in sorted_faces {
+        let view_normal = view_mat * normal;
+        if view_normal.z <= 0.0 { continue; } // Rita bara ytor som pekar mot kameran
+
+        // Beräkna hörn för ytan
+        // Vi hittar två vektorer som är vinkelräta mot normalen för att bygga ytan
+        let (u, v) = if normal.x.abs() > 0.9 {
+            (Vector3::y(), Vector3::z())
+        } else {
+            (Vector3::x(), normal.cross(&Vector3::x()).normalize())
+        };
+
+        let corners = [
+            project_nav(normal + u + v),
+            project_nav(normal - u + v),
+            project_nav(normal - u - v),
+            project_nav(normal + u - v),
+        ];
+
+        let is_hovered = ui.rect_contains_pointer(egui::Rect::from_points(&corners));
+        let color = if is_hovered { egui::Color32::from_rgb(200, 100, 0) } else { egui::Color32::from_gray(60) };
+        
+        painter.add(egui::Shape::convex_polygon(corners.to_vec(), color, egui::Stroke::new(1.0, egui::Color32::WHITE)));
+        
+        // Rita text (t.ex. "F", "T", "R")
+        painter.text(project_nav(*normal), egui::Align2::CENTER_CENTER, &name[0..3], egui::FontId::proportional(12.0), egui::Color32::WHITE);
+
+        if is_hovered && ui.input(|i| i.pointer.any_click()) {
+            app.set_view(*yaw, *pitch);
+        }
+    }
+}
