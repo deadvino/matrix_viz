@@ -1,5 +1,6 @@
 use eframe::egui;
 use nalgebra::{Matrix3, Vector3};
+use rand::Rng; // This must be present to use .gen_range()
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -151,9 +152,9 @@ impl MatrixApp {
 		}
 		if input.key_pressed(egui::Key::Space) {
 		    if ctx.pointer_interact_pos().is_some() {
-		    self.click_to_place = true;
+		    	self.click_to_place = true;
+			}
 		}
-}
         
         if input.modifiers.command && input.key_pressed(egui::Key::Z) {
             if !self.history.is_empty() { self.history.pop(); self.recalculate_target(); }
@@ -174,6 +175,12 @@ impl MatrixApp {
 
 	fn draw_matrix_input_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Transform Matrix");
+        ui.add_space(8.0);
+
+		// --- NEW RANDOM BUTTON ---
+        if ui.button("🎲 Generate Random (-3 to 3, step 0.5)").clicked() {
+            self.generate_random_matrix();
+        }
         ui.add_space(8.0);
 
         egui::Grid::new("matrix_input_grid").spacing([8.0, 8.0]).show(ui, |ui| {
@@ -248,6 +255,20 @@ impl MatrixApp {
 	    // Vi tvingar ner den på XY-planet genom att nollställa Z
 	    self.selected_vector = Vector3::new(world_dir.x, world_dir.y, 0.0);
 	}
+
+
+	fn generate_random_matrix(&mut self) {
+        let mut rng = rand::thread_rng();
+        for r in 0..3 {
+            for c in 0..3 {
+                // Generates values between -6 and 6, then multiplies by 0.5 
+                // to get steps of 0.5 between -3 and 3
+                let rand_val = (rng.gen_range(-6..=6) as f32) * 0.5;
+                self.input[r][c] = rand_val;
+            }
+        }
+        self.recalculate_target();
+    }
 }
 
 
@@ -373,8 +394,17 @@ impl eframe::App for MatrixApp {
 // --- Helpers ---
 
 fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>) {
-    let color = egui::Color32::from_rgba_premultiplied(120, 80, 200, 30);
-    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgba_premultiplied(200, 150, 255, 180));
+    let det = m.determinant();
+    let abs_det = det.abs();
+    
+    // Color based on orientation (Right-handed vs Left-handed system)
+    let color = if det >= 0.0 {
+        egui::Color32::from_rgba_unmultiplied(120, 80, 200, 40)
+    } else {
+        egui::Color32::from_rgba_unmultiplied(200, 80, 80, 40)
+    };
+    
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(200, 150, 255, 180));
     
     let corners = [
         Vector3::new(0.,0.,0.), Vector3::new(1.,0.,0.), Vector3::new(1.,1.,0.), Vector3::new(0.,1.,0.),
@@ -386,10 +416,25 @@ fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> eg
     for face in faces {
         painter.add(egui::Shape::convex_polygon(face.iter().map(|&i| corners[i]).collect(), color, egui::Stroke::NONE));
     }
+    
     let edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
     for edge in edges {
         painter.line_segment([corners[edge[0]], corners[edge[1]]], stroke);
     }
+
+    // --- DISPLAY VOLUME LABEL ---
+	if abs_det > 0.001 {
+	    let center_world = m * Vector3::new(0.5, 0.5, 0.5);
+	    let center_screen = project(center_world);
+	
+	    painter.text(
+	        center_screen,
+	        egui::Align2::CENTER_CENTER,
+	        format!("Vol: {:.2}", abs_det),
+	        egui::FontId::proportional(14.0), // Changed from .bold()
+	        egui::Color32::WHITE
+	    );
+	}
 }
 
 
