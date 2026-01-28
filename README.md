@@ -1,4 +1,4 @@
-# 3D Matrix Visualizer – Full CAD Edition 📐
+# 3D Matrix Visualizer – Also watch 3b1b
 
 An interactive, real-time **linear algebra visualizer** built in **Rust** using **eframe (egui)** and **nalgebra**.  
 Manipulate **3×3 matrices** and instantly see how they transform 3D space through smooth animations and a CAD-style viewport.
