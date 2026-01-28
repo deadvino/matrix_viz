@@ -5,7 +5,7 @@ use rand::Rng; // This must be present to use .gen_range()
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "3D Matrix Visualizer - Full CAD Edition",
+        "3D Matrix Visualizer - Alsy watch 3b1b",
         options,
         Box::new(|_cc| Box::new(MatrixApp::default())),
     )
@@ -277,6 +277,10 @@ impl eframe::App for MatrixApp {
         self.handle_hotkeys(ctx);
         let dt = ctx.input(|i| i.unstable_dt).max(1e-6);
 
+		let x_col = egui::Color32::from_hex("#83B366").unwrap();
+		let y_col = egui::Color32::from_hex("#FF7154").unwrap();
+		let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
+
         // --- SIDEBAR ---
         egui::SidePanel::left("controls").width_range(300.0..=350.0).show(ctx, |ui| {
             ui.heading("Matrix Visualizer");
@@ -375,8 +379,10 @@ impl eframe::App for MatrixApp {
             
             // Render Basis Vectors
             let m = self.current;
-            let vectors = [ (m*Vector3::x(), egui::Color32::RED), (m*Vector3::y(), egui::Color32::GREEN), 
-                            (m*Vector3::z(), egui::Color32::BLUE), (m*self.selected_vector, egui::Color32::YELLOW) ];
+            let vectors = [ (m*Vector3::x(), x_col),
+							(m*Vector3::y(), y_col), 
+                            (m*Vector3::z(), z_col),
+							(m*self.selected_vector, egui::Color32::YELLOW) ];
             
             for (v, color) in vectors {
                 draw_arrow(&painter, project(Vector3::zeros()), project(v), color);
@@ -474,8 +480,26 @@ fn smoothstep(t: f32) -> f32 { t * t * (3.0 - 2.0 * t) }
 
 
 fn draw_arrow(painter: &egui::Painter, start: egui::Pos2, end: egui::Pos2, color: egui::Color32) {
-    if (start - end).length() < 1.0 { return; }
+    let vec = end - start;
+    let len = vec.length();
+    if len < 1.0 { return; }
+    
+    // Main shaft
     painter.line_segment([start, end], egui::Stroke::new(2.5, color));
+    
+    // Arrow head (triangle)
+    let head_len = (len * 0.15).clamp(5.0, 15.0);
+    let dir = vec / len;
+    let perp = egui::vec2(-dir.y, dir.x) * (head_len * 0.4);
+    
+    let tip = end;
+    let base = end - dir * head_len;
+    
+    painter.add(egui::Shape::convex_polygon(
+        vec![tip, base + perp, base - perp],
+        color,
+        egui::Stroke::NONE,
+    ));
 }
 
 
@@ -496,27 +520,23 @@ fn draw_origin_planes(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -
 
 fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<f32>, app: &mut MatrixApp) {
     let rect = painter.clip_rect();
-    // Placera kuben i övre högra hörnet
     let nav_center = egui::pos2(rect.right() - 60.0, rect.top() + 60.0);
     let nav_scale = 30.0;
 
-    // Defoniera ytorna: (Namn, Normalvektor, Yaw, Pitch)
     let faces = [
         ("XY ", Vector3::new(0.0, 0.0, 1.0), 0.0, 0.0),
-        ("-XY",  Vector3::new(0.0, 0.0, -1.0), std::f32::consts::PI, 0.0),
+        ("-XY", Vector3::new(0.0, 0.0, -1.0), std::f32::consts::PI, 0.0),
         ("YZ ", Vector3::new(1.0, 0.0, 0.0), -std::f32::consts::FRAC_PI_2, 0.0),
-        ("-YZ",  Vector3::new(-1.0, 0.0, 0.0), std::f32::consts::FRAC_PI_2, 0.0),
-        ("XZ ",   Vector3::new(0.0, 1.0, 0.0), 0.0, std::f32::consts::FRAC_PI_2),
-        ("-XZ",Vector3::new(0.0, -1.0, 0.0), 0.0, -std::f32::consts::FRAC_PI_2),
+        ("-YZ", Vector3::new(-1.0, 0.0, 0.0), std::f32::consts::FRAC_PI_2, 0.0),
+        ("XZ ", Vector3::new(0.0, 1.0, 0.0), 0.0, std::f32::consts::FRAC_PI_2),
+        ("-XZ", Vector3::new(0.0, -1.0, 0.0), 0.0, -std::f32::consts::FRAC_PI_2),
     ];
 
-    // Hjälpfunktion för lokal projektion av nav-kuben
     let project_nav = |v: Vector3<f32>| {
         let v_view = view_mat * v;
         egui::pos2(nav_center.x + v_view.x * nav_scale, nav_center.y - v_view.y * nav_scale)
     };
 
-    // Sortera ytor efter djup (Z i view-space) så vi ritar de bakersta först
     let mut sorted_faces: Vec<_> = faces.iter().collect();
     sorted_faces.sort_by(|a, b| {
         let az = (view_mat * a.1).z;
@@ -526,10 +546,8 @@ fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<f32>
 
     for (name, normal, yaw, pitch) in sorted_faces {
         let view_normal = view_mat * normal;
-        if view_normal.z <= 0.0 { continue; } // Rita bara ytor som pekar mot kameran
+        if view_normal.z <= 0.0 { continue; }
 
-        // Beräkna hörn för ytan
-        // Vi hittar två vektorer som är vinkelräta mot normalen för att bygga ytan
         let (u, v) = if normal.x.abs() > 0.9 {
             (Vector3::y(), Vector3::z())
         } else {
@@ -547,12 +565,39 @@ fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<f32>
         let color = if is_hovered { egui::Color32::from_rgb(200, 100, 0) } else { egui::Color32::from_gray(60) };
         
         painter.add(egui::Shape::convex_polygon(corners.to_vec(), color, egui::Stroke::new(1.0, egui::Color32::WHITE)));
-        
-        // Rita text (t.ex. "F", "T", "R")
         painter.text(project_nav(*normal), egui::Align2::CENTER_CENTER, &name[0..3], egui::FontId::proportional(12.0), egui::Color32::WHITE);
 
         if is_hovered && ui.input(|i| i.pointer.any_click()) {
             app.set_view(*yaw, *pitch);
+        }
+    }
+
+    // --- DRAW BASIS EDGES (With Occlusion Check) ---
+    let origin_v = Vector3::new(-1.0, -1.0, -1.0);
+    let axes_v = [
+        Vector3::new(1.0, -1.0, -1.0), // X
+        Vector3::new(-1.0, 1.0, -1.0), // Y
+        Vector3::new(-1.0, -1.0, 1.0), // Z
+    ];
+
+    let cols = [
+        egui::Color32::from_hex("#83B366").unwrap(),
+        egui::Color32::from_hex("#FF7154").unwrap(),
+        egui::Color32::from_hex("#8BC9D7").unwrap(),
+    ];
+
+    for i in 0..3 {
+        let end_v = axes_v[i];
+        // Calculate midpoint in world space
+        let midpoint = (origin_v + end_v) * 0.5;
+        // Transform midpoint to view space to check depth
+        let midpoint_view = view_mat * midpoint;
+
+        // If the midpoint's Z is > 0, the edge is on the side facing the camera
+        if midpoint_view.z > 0.0 {
+            let p1 = project_nav(origin_v);
+            let p2 = project_nav(end_v);
+            painter.line_segment([p1, p2], egui::Stroke::new(3.0, cols[i]));
         }
     }
 }
