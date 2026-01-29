@@ -64,6 +64,8 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 Install the Rust toolchain from:  
 https://rustup.rs/
 
+https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
 ### Installation & Execution
 
 Clone the repository:
