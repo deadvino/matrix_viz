@@ -325,7 +325,7 @@ impl eframe::App for MatrixApp {
             // Input handling
             if resp.dragged_by(egui::PointerButton::Primary) {
                 self.view_rot += resp.drag_delta().x * 0.01;
-                self.view_pitch = (self.view_pitch - resp.drag_delta().y * 0.01).clamp(-1.5, 1.5);
+                self.view_pitch = (self.view_pitch - resp.drag_delta().y * -0.01).clamp(-1.5, 1.5);
             }
             self.view_zoom = (self.view_zoom * (1.0 + ui.input(|i| i.smooth_scroll_delta.y) * 0.001)).clamp(0.1, 10.0);
 
