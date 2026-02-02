@@ -330,6 +330,34 @@ impl eframe::App for MatrixApp {
 			if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
 			    self.cross_reverse_order = !self.cross_reverse_order;
 			}
+			// --- Cross product coordinates ---
+			let m = self.current;
+			let yellow_t = m * self.selected_vector;
+			let purple_t = m * self.selected_vector_purple;
+					
+			let cross = if self.cross_reverse_order {
+			    purple_t.cross(&yellow_t)
+			} else {
+			    yellow_t.cross(&purple_t)
+			};
+			
+			ui.add_space(6.0);
+			egui::Frame::group(ui.style()).show(ui, |ui| {
+			    ui.label("Kryssprodukt:");
+			
+			    for i in 0..3 {
+			        let val = cross[i];
+			        let color = if val.abs() < 0.001 {
+			            egui::Color32::DARK_GRAY
+			        } else if val > 0.0 {
+			            egui::Color32::LIGHT_GREEN
+			        } else {
+			            egui::Color32::LIGHT_RED
+			        };
+				
+			        ui.colored_label(color, format!("{:>6.2}", val));
+			    }
+			});
         });
 
         // --- VIEWPORT ---
