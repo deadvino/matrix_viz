@@ -21,12 +21,20 @@ struct MatrixApp {
     input_buffer: String,
     selected_vector: Vector3<f32>,
     history: Vec<Matrix3<f32>>,
+
     // Viewport State
     view_rot: f32,      // Yaw
     view_pitch: f32,    // Pitch
     view_zoom: f32,     // Zoom level
     click_to_place: bool,
-    show_planes: bool,
+
+	// Draw toggles
+	draw_yellow: bool,
+	draw_purple: bool,
+	draw_parallelogram: bool,
+	draw_determinant: bool,
+    draw_planes: bool,
+
     perspective: bool,
     grid_size: i32,
 	grid_opacity: u8, // 0 is invisible, 255 is fully opaque
@@ -49,7 +57,13 @@ impl Default for MatrixApp {
             view_zoom: 1.0,
             input_buffer: String::new(),
             click_to_place: true,
-            show_planes: true,
+			//draw all as default
+            draw_planes: true,
+			draw_yellow: true,
+			draw_purple: true,
+			draw_parallelogram: true,
+			draw_determinant: true,
+
             perspective: true,
             grid_size: 5,
 			grid_opacity: 30, // A nice subtle default
@@ -141,7 +155,7 @@ impl MatrixApp {
         if ctx.wants_keyboard_input() { return; }
         let input = ctx.input(|i| i.clone());
 
-        if input.key_pressed(egui::Key::P) { self.show_planes = !self.show_planes; }
+        if input.key_pressed(egui::Key::P) { self.draw_planes = !self.draw_planes; }
         if input.key_pressed(egui::Key::V) { self.perspective = !self.perspective; }
         if input.key_pressed(egui::Key::C) { self.history.clear(); self.recalculate_target(); }
         
@@ -291,7 +305,15 @@ impl eframe::App for MatrixApp {
 
             ui.separator();
             ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
-            ui.checkbox(&mut self.show_planes, "🔳 Show Original [P]");
+            
+			ui.separator();
+			ui.heading("Draw Toggles");
+			ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
+			ui.checkbox(&mut self.draw_yellow, "🟡 Gul vektor");
+			ui.checkbox(&mut self.draw_purple, "🟣 Lila vektor");
+			ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
+			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
+
             ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
 
             ui.add_space(10.0);
@@ -414,12 +436,13 @@ impl eframe::App for MatrixApp {
             }
 
             // Render Scene
-            if self.show_planes { draw_origin_planes(&painter, &project, self.grid_size); }
+            if self.draw_planes { draw_origin_planes(&painter, &project, self.grid_size); }
             
             let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
             draw_grid_3d(&painter, &project, &self.current, grid_c, self.grid_size);
             
-            draw_unit_cube(&painter, &project, &self.current);
+			if self.draw_determinant { draw_unit_cube(&painter, &project, &self.current, self.draw_determinant); }
+            
             draw_axes_3d(&painter, &project);
             
             // Render Basis Vectors
@@ -449,23 +472,26 @@ impl eframe::App for MatrixApp {
 			let m = self.current;
 			let y = m * self.selected_vector;
 			let p = m * self.selected_vector_purple;
-
-			let poly = vec![
-			    project(Vector3::zeros()),
-			    project(y),
-			    project(y + p),
-			    project(p),
-			];
-
-			painter.add(egui::Shape::convex_polygon(
-			    poly,
-			    egui::Color32::from_rgba_unmultiplied(180, 180, 180, 40),
-			    egui::Stroke::new(1.0, egui::Color32::WHITE),
-			));
+			
+			if self.draw_parallelogram {
+				let poly = vec![
+				    project(Vector3::zeros()),
+				    project(y),
+				    project(y + p),
+				    project(p),
+				];
+				
+				painter.add(egui::Shape::convex_polygon(
+				    poly,
+				    egui::Color32::from_rgba_unmultiplied(180, 180, 180, 40),
+				    egui::Stroke::new(1.0, egui::Color32::WHITE),
+				));
+			}
 			
 			// Rita pilarna
-			draw_arrow(&painter, project(Vector3::zeros()), project(yellow_transformed), egui::Color32::YELLOW);
-			draw_arrow(&painter, project(Vector3::zeros()), project(purple_transformed), egui::Color32::from_rgb(160, 32, 240)); // Lila
+			if self.draw_yellow { draw_arrow(&painter, project(Vector3::zeros()), project(yellow_transformed), egui::Color32::YELLOW); }
+			if self.draw_purple { draw_arrow(&painter, project(Vector3::zeros()), project(purple_transformed), egui::Color32::from_rgb(160, 32, 240)); } // Lila
+			
 			
 			// Rita kryssprodukten (t.ex. vit eller cyan för att synas bra)
 			if cross_prod.norm() > 0.001 {
@@ -483,7 +509,7 @@ impl eframe::App for MatrixApp {
 
 // --- Helpers ---
 
-fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>) {
+fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>, draw_volume: bool,) {
     let det = m.determinant();
     let abs_det = det.abs();
     
@@ -513,7 +539,7 @@ fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> eg
     }
 
     // --- DISPLAY VOLUME LABEL ---
-	if abs_det > 0.001 {
+	if draw_volume && abs_det > 0.001 {
 	    let center_world = m * Vector3::new(0.5, 0.5, 0.5);
 	    let center_screen = project(center_world);
 	
