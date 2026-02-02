@@ -30,6 +30,8 @@ struct MatrixApp {
     perspective: bool,
     grid_size: i32,
 	grid_opacity: u8, // 0 is invisible, 255 is fully opaque
+	selected_vector_purple: Vector3<f32>, // Den nya lila vektorn
+    cross_reverse_order: bool,           // För att byta ordning (Lila x Gul vs Gul x Lila)
 }
 
 impl Default for MatrixApp {
@@ -41,7 +43,6 @@ impl Default for MatrixApp {
             anim_t: 0.0,
             animating: false,
             input: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-            selected_vector: Vector3::new(1.0, 1.0, 0.0),
             history: Vec::new(),
             view_rot: 0.5,
             view_pitch: 0.3,
@@ -52,6 +53,9 @@ impl Default for MatrixApp {
             perspective: true,
             grid_size: 5,
 			grid_opacity: 30, // A nice subtle default
+			selected_vector: Vector3::new(1.0, 1.0, 0.0), // Gul
+            selected_vector_purple: Vector3::new(-1.0, 1.0, 0.0), // Lila standard
+            cross_reverse_order: false,
         }
     }
 }
@@ -239,21 +243,16 @@ impl MatrixApp {
     }
 
 
-	fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>) {
+	fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>, target_is_purple: bool) {
 	    let center = rect.center();
 	    let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
-		
-	    // Invertera kamerans rotation för att gå från skärm -> världsrymden
 	    let inv_view = view_mat.transpose();
-		
 	    let dx = (mouse_pos.x - center.x) / base_scale;
 	    let dy = (center.y - mouse_pos.y) / base_scale;
-		
-	    // Vi skapar en vektor i kamerans plan och roterar den till världsrymden
 	    let world_dir = inv_view * Vector3::new(dx, dy, 0.0);
-		
-	    // Vi tvingar ner den på XY-planet genom att nollställa Z
-	    self.selected_vector = Vector3::new(world_dir.x, world_dir.y, 0.0);
+	
+	    let target = if target_is_purple { &mut self.selected_vector_purple } else { &mut self.selected_vector };
+	    *target = Vector3::new(world_dir.x, world_dir.y, 0.0);
 	}
 
 
@@ -315,6 +314,22 @@ impl eframe::App for MatrixApp {
 			    }
 			});
 			ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
+			ui.separator();
+			ui.heading("Custom Vector 2 (Purple)");
+			ui.horizontal(|ui| {
+			    for i in 0..3 {
+			        let id = ui.make_persistent_id(format!("purple_vec_{}", i));
+			        Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
+			    }
+			});
+			ui.label("Tips: [Shift+Space] för att placera lila vektor.");
+
+			ui.add_space(10.0);
+			ui.heading("Cross Product");
+			let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
+			if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
+			    self.cross_reverse_order = !self.cross_reverse_order;
+			}
         });
 
         // --- VIEWPORT ---
@@ -349,12 +364,14 @@ impl eframe::App for MatrixApp {
 			    rect.center() + egui::vec2(v_v.x * factor, -v_v.y * factor)
 			};
 
-			// --- Hantera Space-tangenten för att placera vektorn ---
-			// Nu fungerar detta eftersom 'project' inte längre lånar 'self'
-			if ctx.input(|i| i.key_down(egui::Key::Space)) {
+			let is_space = ctx.input(|i| i.key_down(egui::Key::Space));
+			let is_shift = ctx.input(|i| i.modifiers.shift);
+
+			if is_space {
 			    if let Some(pos) = ctx.pointer_interact_pos() {
 			        if rect.contains(pos) {
-			            self.place_vector_at_mouse(pos, rect, view_mat);
+			            // Om shift är nere -> Lila, annars -> Gul
+			            self.place_vector_at_mouse(pos, rect, view_mat, is_shift);
 			        }
 			    }
 			}
@@ -387,6 +404,27 @@ impl eframe::App for MatrixApp {
             for (v, color) in vectors {
                 draw_arrow(&painter, project(Vector3::zeros()), project(v), color);
             }
+
+			// Render Basis Vectors & Custom Vectors
+			let m = self.current;
+			let yellow_transformed = m * self.selected_vector;
+			let purple_transformed = m * self.selected_vector_purple;
+				
+			// Beräkna kryssprodukt baserat på ordning
+			let cross_prod = if self.cross_reverse_order {
+				purple_transformed.cross(&yellow_transformed)
+			} else {
+				yellow_transformed.cross(&purple_transformed)
+			};
+			
+			// Rita pilarna
+			draw_arrow(&painter, project(Vector3::zeros()), project(yellow_transformed), egui::Color32::YELLOW);
+			draw_arrow(&painter, project(Vector3::zeros()), project(purple_transformed), egui::Color32::from_rgb(160, 32, 240)); // Lila
+			
+			// Rita kryssprodukten (t.ex. vit eller cyan för att synas bra)
+			if cross_prod.norm() > 0.001 {
+				draw_arrow(&painter, project(Vector3::zeros()), project(cross_prod), egui::Color32::WHITE);
+			}
 
             // UI Elements (Nav Cube)
             draw_nav_cube(ui, &painter, &view_mat, self);
