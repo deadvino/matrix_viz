@@ -5,7 +5,7 @@ use rand::Rng; // This must be present to use .gen_range()
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "3D Matrix Visualizer - Alsy watch 3b1b",
+        "3D Matrix Visualizer - Also watch 3b1b",
         options,
         Box::new(|_cc| Box::new(MatrixApp::default())),
     )
@@ -449,14 +449,14 @@ impl eframe::App for MatrixApp {
 			let m = self.current;
 			let y = m * self.selected_vector;
 			let p = m * self.selected_vector_purple;
-					
+
 			let poly = vec![
 			    project(Vector3::zeros()),
 			    project(y),
 			    project(y + p),
 			    project(p),
 			];
-					
+
 			painter.add(egui::Shape::convex_polygon(
 			    poly,
 			    egui::Color32::from_rgba_unmultiplied(180, 180, 180, 40),
