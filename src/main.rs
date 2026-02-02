@@ -334,13 +334,13 @@ impl eframe::App for MatrixApp {
 			let m = self.current;
 			let yellow_t = m * self.selected_vector;
 			let purple_t = m * self.selected_vector_purple;
-					
+
 			let cross = if self.cross_reverse_order {
 			    purple_t.cross(&yellow_t)
 			} else {
 			    yellow_t.cross(&purple_t)
 			};
-			
+
 			ui.add_space(6.0);
 			egui::Frame::group(ui.style()).show(ui, |ui| {
 			    ui.label("Kryssprodukt:");
@@ -444,6 +444,24 @@ impl eframe::App for MatrixApp {
 			} else {
 				yellow_transformed.cross(&purple_transformed)
 			};
+
+			// --- Parallelogram between yellow & purple ---
+			let m = self.current;
+			let y = m * self.selected_vector;
+			let p = m * self.selected_vector_purple;
+					
+			let poly = vec![
+			    project(Vector3::zeros()),
+			    project(y),
+			    project(y + p),
+			    project(p),
+			];
+					
+			painter.add(egui::Shape::convex_polygon(
+			    poly,
+			    egui::Color32::from_rgba_unmultiplied(180, 180, 180, 40),
+			    egui::Stroke::new(1.0, egui::Color32::WHITE),
+			));
 			
 			// Rita pilarna
 			draw_arrow(&painter, project(Vector3::zeros()), project(yellow_transformed), egui::Color32::YELLOW);
