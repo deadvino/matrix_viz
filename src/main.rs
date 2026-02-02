@@ -31,6 +31,7 @@ struct MatrixApp {
 	// Draw toggles
 	draw_yellow: bool,
 	draw_purple: bool,
+	draw_cross_vector: bool,
 	draw_parallelogram: bool,
 	draw_determinant: bool,
     draw_planes: bool,
@@ -62,6 +63,7 @@ impl Default for MatrixApp {
 			draw_yellow: true,
 			draw_purple: true,
 			draw_parallelogram: true,
+			draw_cross_vector: true,
 			draw_determinant: true,
 
             perspective: true,
@@ -311,6 +313,7 @@ impl eframe::App for MatrixApp {
 			ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
 			ui.checkbox(&mut self.draw_yellow, "🟡 Gul vektor");
 			ui.checkbox(&mut self.draw_purple, "🟣 Lila vektor");
+			ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
 			ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
 			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
 
@@ -347,6 +350,7 @@ impl eframe::App for MatrixApp {
 			ui.label("Tips: [Shift+Space] för att placera lila vektor.");
 
 			ui.add_space(10.0);
+			ui.separator();
 			ui.heading("Cross Product");
 			let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
 			if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
@@ -494,7 +498,7 @@ impl eframe::App for MatrixApp {
 			
 			
 			// Rita kryssprodukten (t.ex. vit eller cyan för att synas bra)
-			if cross_prod.norm() > 0.001 {
+			if self.draw_cross_vector && cross_prod.norm() > 0.001 {
 				draw_arrow(&painter, project(Vector3::zeros()), project(cross_prod), egui::Color32::WHITE);
 			}
 
