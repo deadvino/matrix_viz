@@ -58,12 +58,12 @@ impl Default for MatrixApp {
             view_zoom: 1.0,
             input_buffer: String::new(),
             click_to_place: true,
-			//draw all as default
+			//draw defaults
             draw_planes: true,
-			draw_yellow: true,
-			draw_purple: true,
-			draw_parallelogram: true,
-			draw_cross_vector: true,
+			draw_yellow: false,
+			draw_purple: false,
+			draw_parallelogram: false,
+			draw_cross_vector: false,
 			draw_determinant: true,
 
             perspective: true,
