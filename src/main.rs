@@ -270,6 +270,25 @@ impl MatrixApp {
     }
 
 
+	fn draw_matrix(ui: &mut egui::Ui, m: &Matrix3<f32>) {
+		for r in 0..3 {
+			ui.horizontal(|ui| {
+				for c in 0..3 {
+					let val = m[(r, c)];
+					let color = if val.abs() < 0.001 {
+						egui::Color32::DARK_GRAY
+					} else if val > 0.0 {
+						egui::Color32::LIGHT_GREEN
+					} else {
+						egui::Color32::LIGHT_RED
+					};
+					ui.colored_label(color, format!("{:>6.2}", val));
+				}
+			});
+		}
+	}
+
+
 	fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>, target_is_purple: bool) {
 	    let center = rect.center();
 	    let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
@@ -349,10 +368,37 @@ impl eframe::App for MatrixApp {
             self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
 
             ui.separator();
-            ui.heading("Resulting M_total");
-            self.draw_result_matrix(ui); // Hjälpfunktion för att rita ut 3x3 resultatet
-            
-            ui.label(format!("Det: {:.4}", self.target.determinant()));
+            ui.heading("Resulting Matrix");
+
+			egui::Frame::group(ui.style()).show(ui, |ui| {
+			    ui.horizontal(|ui| {
+				
+			        // --- M_total ---
+			        ui.vertical(|ui| {
+			            ui.label("M");
+			            self::draw_matrix(ui, &self.target);
+			        });
+				
+			        ui.separator();
+				
+			        // --- Invers ---
+			        ui.vertical(|ui| {
+			            ui.label("M¹");
+					
+			            if let Some(inv) = self.target.try_inverse() {
+			                self::draw_matrix(ui, &inv);
+			            } else {
+			                ui.colored_label(
+			                    egui::Color32::LIGHT_RED,
+			                    "Not invertible"
+			                );
+			            }
+			        });
+			    });
+			});
+
+			ui.add_space(4.0);
+			ui.label(format!("det(M) = {:.4}", self.target.determinant()));
 			
 			if self.draw_yellow {
 				ui.add_space(10.0);
