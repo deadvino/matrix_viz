@@ -329,7 +329,21 @@ impl eframe::App for MatrixApp {
             ui.label(format!("Det: {:.4}", self.target.determinant()));
 
 			ui.separator();
-			ui.heading("Yellow Vector");
+			ui.horizontal(|ui| {
+			    ui.label(
+			        egui::RichText::new("Yellow")
+			            .color(egui::Color32::YELLOW)
+			            .strong()
+						.size(18.0)
+
+			    );
+			    ui.label(
+			        egui::RichText::new(" Vector")
+			            .strong()
+						.size(18.0)
+
+			    );
+			});
 			ui.horizontal(|ui| {
 			    for i in 0..3 {
 			        let label = ["X", "Y", "Z"][i];
@@ -340,7 +354,20 @@ impl eframe::App for MatrixApp {
 			});
 			ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
 			ui.separator();
-			ui.heading("Purple Vector");
+			ui.horizontal(|ui| {
+			    ui.label(
+			        egui::RichText::new("Purple")
+			            .color(egui::Color32::from_rgb(160, 32, 240))
+			            .strong()
+						.size(18.0)
+			    );
+			    ui.label(
+			        egui::RichText::new(" Vector")
+			            .strong()
+						.size(18.0)
+			    );
+			});
+
 			ui.horizontal(|ui| {
 			    for i in 0..3 {
 			        let id = ui.make_persistent_id(format!("purple_vec_{}", i));
