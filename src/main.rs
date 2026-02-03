@@ -17,6 +17,7 @@ struct MatrixApp {
     target: Matrix3<f32>,
     anim_t: f32,
     animating: bool,
+	anim_speed: f32,
     input: [[f32; 3]; 3],
     input_buffer: String,
     selected_vector: Vector3<f32>,
@@ -51,6 +52,7 @@ impl Default for MatrixApp {
             target: Matrix3::identity(),
             anim_t: 0.0,
             animating: false,
+			anim_speed: 1.0,
             input: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             history: Vec::new(),
             view_rot: 0.5,
@@ -318,6 +320,10 @@ impl eframe::App for MatrixApp {
 			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
 
             ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
+			ui.add(
+			    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
+			        .text("Animation Speed")
+			);
 
             ui.add_space(10.0);
             self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
@@ -487,7 +493,8 @@ impl eframe::App for MatrixApp {
 			
             // Animation
             if self.animating {
-                self.anim_t += dt / 0.8;
+                let base_duration = 0.8;
+				self.anim_t += dt * self.anim_speed / base_duration;
                 let t = smoothstep(self.anim_t.min(1.0));
                 self.current = self.start * (1.0 - t) + self.target * t;
                 if self.anim_t >= 1.0 { self.current = self.target; self.animating = false; }
