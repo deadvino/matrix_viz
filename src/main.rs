@@ -467,7 +467,7 @@ impl eframe::App for MatrixApp {
             }
 
             // Render Scene
-            if self.draw_planes { draw_origin_planes(&painter, &project, self.grid_size); }
+            if self.draw_planes && !self.current.is_identity(1e-10)  { draw_origin_planes(&painter, &project, self.grid_size); }
             
             let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
             draw_grid_3d(&painter, &project, &self.current, grid_c, self.grid_size);
