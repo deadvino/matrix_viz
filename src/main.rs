@@ -311,14 +311,22 @@ impl eframe::App for MatrixApp {
             ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
             
 			ui.separator();
-			ui.heading("Draw Toggles");
+			ui.heading("Feature Toggles");
 			ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
+			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
 			ui.checkbox(&mut self.draw_yellow, "🟡 Gul vektor");
 			ui.checkbox(&mut self.draw_purple, "🟣 Lila vektor");
-			ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
-			ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
-			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
+			
+			if self.draw_yellow && self.draw_purple {
+				ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
+				ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
+			}
+			if !(self.draw_yellow && self.draw_purple) {
+				self.draw_cross_vector = false;
+				self.draw_parallelogram = false;
+			}
 
+			ui.add_space(6.0);
             ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
 			ui.add(
 			    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
@@ -333,116 +341,126 @@ impl eframe::App for MatrixApp {
             self.draw_result_matrix(ui); // Hjälpfunktion för att rita ut 3x3 resultatet
             
             ui.label(format!("Det: {:.4}", self.target.determinant()));
-
-			ui.separator();
-			ui.horizontal(|ui| {
-			    ui.label(
-			        egui::RichText::new("Yellow")
-			            .color(egui::Color32::YELLOW)
-			            .strong()
-						.size(18.0)
-
-			    );
-			    ui.label(
-			        egui::RichText::new(" Vector")
-			            .strong()
-						.size(18.0)
-
-			    );
-			});
-			ui.horizontal(|ui| {
-			    for i in 0..3 {
-			        let label = ["X", "Y", "Z"][i];
-			        ui.label(format!("{}:", label));
-			        let id = ui.make_persistent_id(format!("custom_vec_{}", i));
-			        Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
-			    }
-			});
-			ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
-			ui.separator();
-			ui.horizontal(|ui| {
-			    ui.label(
-			        egui::RichText::new("Purple")
-			            .color(egui::Color32::from_rgb(160, 32, 240))
-			            .strong()
-						.size(18.0)
-			    );
-			    ui.label(
-			        egui::RichText::new(" Vector")
-			            .strong()
-						.size(18.0)
-			    );
-			});
-
-			ui.horizontal(|ui| {
-			    for i in 0..3 {
-			        let id = ui.make_persistent_id(format!("purple_vec_{}", i));
-			        Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
-			    }
-			});
-			ui.label("Tips: [Shift+Space] för att placera lila vektor.");
 			
-			ui.add_space(10.0);
-			ui.separator();
-			ui.heading("Vector Properties");
-			let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
-			if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
-			    self.cross_reverse_order = !self.cross_reverse_order;
+			if self.draw_yellow {
+				ui.add_space(10.0);
+				ui.separator();
+				ui.horizontal(|ui| {
+					ui.label(
+						egui::RichText::new("Yellow")
+							.color(egui::Color32::YELLOW)
+							.strong()
+							.size(18.0)
+	
+					);
+					ui.label(
+						egui::RichText::new(" Vector")
+							.strong()
+							.size(18.0)
+	
+					);
+				});
+				ui.horizontal(|ui| {
+					for i in 0..3 {
+						let label = ["X", "Y", "Z"][i];
+						ui.label(format!("{}:", label));
+						let id = ui.make_persistent_id(format!("custom_vec_{}", i));
+						Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
+					}
+				});
+				ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
 			}
-			// --- Cross product coordinates ---
-			let m = self.current;
-			let yellow_t = m * self.selected_vector;
-			let purple_t = m * self.selected_vector_purple;
 
-			let cross = if self.cross_reverse_order {
-			    purple_t.cross(&yellow_t)
-			} else {
-			    yellow_t.cross(&purple_t)
-			};
-
-
-			ui.add_space(6.0);
-			egui::Frame::group(ui.style()).show(ui, |ui| {
-			    ui.horizontal(|ui| {
+			if self.draw_purple {
+				ui.add_space(10.0);
+				ui.separator();
+				ui.horizontal(|ui| {
+					ui.label(
+						egui::RichText::new("Purple")
+							.color(egui::Color32::from_rgb(160, 32, 240))
+							.strong()
+							.size(18.0)
+					);
+					ui.label(
+						egui::RichText::new(" Vector")
+							.strong()
+							.size(18.0)
+					);
+				});
+	
+				ui.horizontal(|ui| {
+					for i in 0..3 {
+						let id = ui.make_persistent_id(format!("purple_vec_{}", i));
+						Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
+					}
+				});
+				ui.label("Tips: [Shift+Space] för att placera lila vektor.");
 				
-			        // --- Crossproduct (column 1) ---
-			        ui.vertical(|ui| {
-			            ui.label("Cross product:");
+			}
+			
+			if self.draw_yellow && self.draw_purple {
+
+				ui.add_space(10.0);
+				ui.separator();
+				ui.heading("Vector Properties");
+				let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
+				if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
+					self.cross_reverse_order = !self.cross_reverse_order;
+				}
+				// --- Cross product coordinates ---
+				let m = self.current;
+				let yellow_t = m * self.selected_vector;
+				let purple_t = m * self.selected_vector_purple;
+	
+				let cross = if self.cross_reverse_order {
+					purple_t.cross(&yellow_t)
+				} else {
+					yellow_t.cross(&purple_t)
+				};
+	
+				ui.add_space(6.0);
+				egui::Frame::group(ui.style()).show(ui, |ui| {
+					ui.horizontal(|ui| {
 					
-			            for i in 0..3 {
-			                let val = cross[i];
-			                let color = if val.abs() < 0.001 {
-			                    egui::Color32::DARK_GRAY
-			                } else if val > 0.0 {
-			                    egui::Color32::LIGHT_GREEN
-			                } else {
-			                    egui::Color32::LIGHT_RED
-			                };
+						// --- Crossproduct (column 1) ---
+						ui.vertical(|ui| {
+							ui.label("Cross product:");
 						
-			                ui.colored_label(color, format!("{:>6.2}", val));
-			            }
-			        });
-				
-			        ui.separator();
-				
-			        // --- Dot-product (column 2) ---
-			        ui.vertical(|ui| {
-			            ui.label("Dot product:");
+							for i in 0..3 {
+								let val = cross[i];
+								let color = if val.abs() < 0.001 {
+									egui::Color32::DARK_GRAY
+								} else if val > 0.0 {
+									egui::Color32::LIGHT_GREEN
+								} else {
+									egui::Color32::LIGHT_RED
+								};
+							
+								ui.colored_label(color, format!("{:>6.2}", val));
+							}
+						});
 					
-			            let dot = yellow_t.dot(&purple_t);
+						ui.separator();
 					
-			            let color = if dot.abs() < 0.001 {
-			                egui::Color32::DARK_GRAY
-			            } else if dot > 0.0 {
-			                egui::Color32::LIGHT_GREEN
-			            } else {
-			                egui::Color32::LIGHT_RED
-			            };
-					
-			            ui.colored_label(color, format!("{:.3}", dot));
-			        });
-			    });
-			});
+						// --- Dot-product (column 2) ---
+						ui.vertical(|ui| {
+							ui.label("Dot product:");
+						
+							let dot = yellow_t.dot(&purple_t);
+						
+							let color = if dot.abs() < 0.001 {
+								egui::Color32::DARK_GRAY
+							} else if dot > 0.0 {
+								egui::Color32::LIGHT_GREEN
+							} else {
+								egui::Color32::LIGHT_RED
+							};
+						
+							ui.colored_label(color, format!("{:.3}", dot));
+						});
+					});
+				});
+			}
 
         });
 
