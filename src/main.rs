@@ -376,7 +376,7 @@ impl eframe::App for MatrixApp {
 			        // --- M_total ---
 			        ui.vertical(|ui| {
 			            ui.label("M");
-			            self::draw_matrix(ui, &self.target);
+			            Self::draw_matrix(ui, &self.target);
 			        });
 				
 			        ui.separator();
@@ -386,7 +386,7 @@ impl eframe::App for MatrixApp {
 			            ui.label("M¹");
 					
 			            if let Some(inv) = self.target.try_inverse() {
-			                self::draw_matrix(ui, &inv);
+			                Self::draw_matrix(ui, &inv);
 			            } else {
 			                ui.colored_label(
 			                    egui::Color32::LIGHT_RED,
