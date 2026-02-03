@@ -329,7 +329,7 @@ impl eframe::App for MatrixApp {
             ui.label(format!("Det: {:.4}", self.target.determinant()));
 
 			ui.separator();
-			ui.heading("Custom Vector (Yellow)");
+			ui.heading("Yellow Vector");
 			ui.horizontal(|ui| {
 			    for i in 0..3 {
 			        let label = ["X", "Y", "Z"][i];
@@ -340,7 +340,7 @@ impl eframe::App for MatrixApp {
 			});
 			ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
 			ui.separator();
-			ui.heading("Custom Vector 2 (Purple)");
+			ui.heading("Purple Vector");
 			ui.horizontal(|ui| {
 			    for i in 0..3 {
 			        let id = ui.make_persistent_id(format!("purple_vec_{}", i));
@@ -348,10 +348,10 @@ impl eframe::App for MatrixApp {
 			    }
 			});
 			ui.label("Tips: [Shift+Space] för att placera lila vektor.");
-
+			
 			ui.add_space(10.0);
 			ui.separator();
-			ui.heading("Cross Product");
+			ui.heading("Vector Properties");
 			let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
 			if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
 			    self.cross_reverse_order = !self.cross_reverse_order;
@@ -367,23 +367,50 @@ impl eframe::App for MatrixApp {
 			    yellow_t.cross(&purple_t)
 			};
 
+
 			ui.add_space(6.0);
 			egui::Frame::group(ui.style()).show(ui, |ui| {
-			    ui.label("Kryssprodukt:");
-			
-			    for i in 0..3 {
-			        let val = cross[i];
-			        let color = if val.abs() < 0.001 {
-			            egui::Color32::DARK_GRAY
-			        } else if val > 0.0 {
-			            egui::Color32::LIGHT_GREEN
-			        } else {
-			            egui::Color32::LIGHT_RED
-			        };
+			    ui.horizontal(|ui| {
 				
-			        ui.colored_label(color, format!("{:>6.2}", val));
-			    }
+			        // --- Crossproduct (column 1) ---
+			        ui.vertical(|ui| {
+			            ui.label("Cross product:");
+					
+			            for i in 0..3 {
+			                let val = cross[i];
+			                let color = if val.abs() < 0.001 {
+			                    egui::Color32::DARK_GRAY
+			                } else if val > 0.0 {
+			                    egui::Color32::LIGHT_GREEN
+			                } else {
+			                    egui::Color32::LIGHT_RED
+			                };
+						
+			                ui.colored_label(color, format!("{:>6.2}", val));
+			            }
+			        });
+				
+			        ui.separator();
+				
+			        // --- Dot-product (column 2) ---
+			        ui.vertical(|ui| {
+			            ui.label("Dot product:");
+					
+			            let dot = yellow_t.dot(&purple_t);
+					
+			            let color = if dot.abs() < 0.001 {
+			                egui::Color32::DARK_GRAY
+			            } else if dot > 0.0 {
+			                egui::Color32::LIGHT_GREEN
+			            } else {
+			                egui::Color32::LIGHT_RED
+			            };
+					
+			            ui.colored_label(color, format!("{:.3}", dot));
+			        });
+			    });
 			});
+
         });
 
         // --- VIEWPORT ---
