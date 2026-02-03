@@ -172,6 +172,15 @@ impl MatrixApp {
 		    self.history.push(m);
 		    self.recalculate_target();
 		}
+
+		if input.key_pressed(egui::Key::R) && !self.animating {
+			if input.modifiers.shift {
+		        self.generate_random_matrix(1.0, 1.0); // t.ex. -1..1
+		    } else {
+		        self.generate_random_matrix(3.0, 0.5);
+		    }
+		}
+
 		if input.key_pressed(egui::Key::Space) {
 		    if ctx.pointer_interact_pos().is_some() {
 		    	self.click_to_place = true;
@@ -200,8 +209,8 @@ impl MatrixApp {
         ui.add_space(8.0);
 
 		// --- NEW RANDOM BUTTON ---
-        if ui.button("🎲 Generate Random (-3 to 3, step 0.5)").clicked() {
-            self.generate_random_matrix();
+        if ui.button("🎲 Generate Random [R]").clicked()  {
+            self.generate_random_matrix(3.0, 0.5);
         }
         ui.add_space(8.0);
 
@@ -274,14 +283,17 @@ impl MatrixApp {
 	}
 
 
-	fn generate_random_matrix(&mut self) {
+	fn generate_random_matrix(&mut self, range: f32, step: f32) {
         let mut rng = rand::thread_rng();
+
+		let max = (range / step) as i32;
+
         for r in 0..3 {
             for c in 0..3 {
                 // Generates values between -6 and 6, then multiplies by 0.5 
                 // to get steps of 0.5 between -3 and 3
-                let rand_val = (rng.gen_range(-6..=6) as f32) * 0.5;
-                self.input[r][c] = rand_val;
+                let rand_val = rng.gen_range(-max..=max);
+                self.input[r][c] = rand_val as f32 * step;
             }
         }
         self.recalculate_target();
