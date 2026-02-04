@@ -248,28 +248,6 @@ impl MatrixApp {
     }
 
 
-    fn draw_result_matrix(&self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(15.0, 5.0);
-            for r in 0..3 {
-                ui.horizontal(|ui| {
-                    for c in 0..3 {
-                        let val = self.target[(r, c)];
-                        let color = if val.abs() < 0.001 { 
-                            egui::Color32::DARK_GRAY 
-                        } else if val > 0.0 { 
-                            egui::Color32::LIGHT_GREEN 
-                        } else { 
-                            egui::Color32::LIGHT_RED 
-                        };
-                        ui.colored_label(color, format!("{:>6.2}", val));
-                    }
-                });
-            }
-        });
-    }
-
-
 	fn draw_matrix(ui: &mut egui::Ui, m: &Matrix3<f32>) {
 		for r in 0..3 {
 			ui.horizontal(|ui| {
@@ -383,7 +361,14 @@ impl eframe::App for MatrixApp {
 				
 			        // --- Invers ---
 			        ui.vertical(|ui| {
-			            ui.label("M¹");
+			            ui.horizontal(|ui| {
+						    ui.label("M");
+						    ui.label(
+						        egui::RichText::new("-1")
+						            .small()
+						            .raised()
+						    );
+						});
 					
 			            if let Some(inv) = self.target.try_inverse() {
 			                Self::draw_matrix(ui, &inv);
