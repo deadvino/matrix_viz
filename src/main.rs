@@ -161,6 +161,7 @@ impl MatrixApp {
 
         if input.key_pressed(egui::Key::P) { self.draw_planes = !self.draw_planes; }
         if input.key_pressed(egui::Key::V) { self.perspective = !self.perspective; }
+		if input.key_pressed(egui::Key::D) { self.draw_determinant = !self.draw_determinant; }
         if input.key_pressed(egui::Key::C) { self.history.clear(); self.recalculate_target(); }
         
         if input.key_pressed(egui::Key::A) && !self.animating {
@@ -306,202 +307,263 @@ impl eframe::App for MatrixApp {
 		let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
 
         // --- SIDEBAR ---
-        egui::SidePanel::left("controls").width_range(300.0..=350.0).show(ctx, |ui| {
-            ui.heading("Matrix Visualizer");
-            ui.add_space(4.0);
-            
-            ui.collapsing("⌨ Hotkeys", |ui| {
-                ui.label("P: Planes | V: Persp | A: Apply\nCtrl+Z: Undo | C: Clear");
-            });
+        egui::SidePanel::left("controls")
+			.width_range(300.0..=350.0)
+			.show(ctx, |ui| {
+				egui::ScrollArea::vertical()
+            	.auto_shrink([false; 2])
+            	.show(ui, |ui| {
+            		ui.heading("Matrix Visualizer");
+            		ui.add_space(4.0);
 
-            ui.separator();
-            ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
-            
-			ui.separator();
-			ui.heading("Feature Toggles");
-			ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
-			ui.checkbox(&mut self.draw_determinant, "🧊 Determinant (kub + volym)");
-			ui.checkbox(&mut self.draw_yellow, "🟡 Gul vektor");
-			ui.checkbox(&mut self.draw_purple, "🟣 Lila vektor");
-			
-			if self.draw_yellow && self.draw_purple {
-				ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
-				ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
-			}
-			if !(self.draw_yellow && self.draw_purple) {
-				self.draw_cross_vector = false;
-				self.draw_parallelogram = false;
-			}
-
-			ui.add_space(6.0);
-            ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
-			ui.add(
-			    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
-			        .text("Animation Speed")
-			);
-
-            ui.add_space(10.0);
-            self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
-
-            ui.separator();
-            ui.heading("Resulting Matrix");
-
-			egui::Frame::group(ui.style()).show(ui, |ui| {
-			    ui.horizontal(|ui| {
+            		ui.collapsing("⌨ Hotkeys", |ui| {
+            		    ui.label("P: Planes | V: Persp | A: Apply\nCtrl+Z: Undo | C: Clear");
+            		});
 				
-			        // --- M_total ---
-			        ui.vertical(|ui| {
-			            ui.label("M");
-			            Self::draw_matrix(ui, &self.target);
-			        });
+            		ui.separator();
+            		ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
 				
-			        ui.separator();
-				
-			        // --- Invers ---
-			        ui.vertical(|ui| {
-			            ui.horizontal(|ui| {
-						    ui.label("M");
-						    ui.label(
-						        egui::RichText::new("-1")
-						            .small()
-						            .raised()
-						    );
-						});
-					
-			            if let Some(inv) = self.target.try_inverse() {
-			                Self::draw_matrix(ui, &inv);
-			            } else {
-			                ui.colored_label(
-			                    egui::Color32::LIGHT_RED,
-			                    "Not invertible"
-			                );
-			            }
-			        });
-			    });
-			});
+					ui.separator();
+					ui.heading("Feature Toggles");
+					ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
+					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
+					ui.checkbox(&mut self.draw_yellow, "🟡 Gul vektor");
+					ui.checkbox(&mut self.draw_purple, "🟣 Lila vektor");
 
-			ui.add_space(4.0);
-			ui.label(format!("det(M) = {:.4}", self.target.determinant()));
-			
-			if self.draw_yellow {
-				ui.add_space(10.0);
-				ui.separator();
-				ui.horizontal(|ui| {
-					ui.label(
-						egui::RichText::new("Yellow")
-							.color(egui::Color32::YELLOW)
-							.strong()
-							.size(18.0)
-	
-					);
-					ui.label(
-						egui::RichText::new(" Vector")
-							.strong()
-							.size(18.0)
-	
-					);
-				});
-				ui.horizontal(|ui| {
-					for i in 0..3 {
-						let label = ["X", "Y", "Z"][i];
-						ui.label(format!("{}:", label));
-						let id = ui.make_persistent_id(format!("custom_vec_{}", i));
-						Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
+					if self.draw_yellow && self.draw_purple {
+						ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
+						ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
 					}
-				});
-				ui.label("Tips: Håll [Space] för att flytta vektorn med musen.");
-			}
-
-			if self.draw_purple {
-				ui.add_space(10.0);
-				ui.separator();
-				ui.horizontal(|ui| {
-					ui.label(
-						egui::RichText::new("Purple")
-							.color(egui::Color32::from_rgb(160, 32, 240))
-							.strong()
-							.size(18.0)
-					);
-					ui.label(
-						egui::RichText::new(" Vector")
-							.strong()
-							.size(18.0)
-					);
-				});
-	
-				ui.horizontal(|ui| {
-					for i in 0..3 {
-						let id = ui.make_persistent_id(format!("purple_vec_{}", i));
-						Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
+					if !(self.draw_yellow && self.draw_purple) {
+						self.draw_cross_vector = false;
+						self.draw_parallelogram = false;
 					}
-				});
-				ui.label("Tips: [Shift+Space] för att placera lila vektor.");
 				
-			}
-			
-			if self.draw_yellow && self.draw_purple {
-
-				ui.add_space(10.0);
-				ui.separator();
-				ui.heading("Vector Properties");
-				let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
-				if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
-					self.cross_reverse_order = !self.cross_reverse_order;
-				}
-				// --- Cross product coordinates ---
-				let m = self.current;
-				let yellow_t = m * self.selected_vector;
-				let purple_t = m * self.selected_vector_purple;
-	
-				let cross = if self.cross_reverse_order {
-					purple_t.cross(&yellow_t)
-				} else {
-					yellow_t.cross(&purple_t)
-				};
-	
-				ui.add_space(6.0);
-				egui::Frame::group(ui.style()).show(ui, |ui| {
-					ui.horizontal(|ui| {
-					
-						// --- Crossproduct (column 1) ---
-						ui.vertical(|ui| {
-							ui.label("Cross product:");
+					ui.add_space(6.0);
+            		ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
+					ui.add(
+					    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
+					        .text("Animation Speed")
+					);
+				
+            		ui.add_space(10.0);
+            		self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
+				
+            		ui.separator();
+            		ui.heading("Resulting Matrix");
+				
+					egui::Frame::group(ui.style()).show(ui, |ui| {
+					    ui.horizontal(|ui| {
 						
-							for i in 0..3 {
-								let val = cross[i];
-								let color = if val.abs() < 0.001 {
-									egui::Color32::DARK_GRAY
-								} else if val > 0.0 {
-									egui::Color32::LIGHT_GREEN
-								} else {
-									egui::Color32::LIGHT_RED
-								};
+					        // --- M_total ---
+					        ui.vertical(|ui| {
+					            ui.label("M");
+					            Self::draw_matrix(ui, &self.target);
+					        });
+						
+					        ui.separator();
+						
+					        // --- Invers ---
+					        ui.vertical(|ui| {
+					            ui.horizontal(|ui| {
+								    ui.label("M");
+								    ui.label(
+								        egui::RichText::new("-1")
+								            .small()
+								            .raised()
+								    );
+								});
 							
-								ui.colored_label(color, format!("{:>6.2}", val));
+					            if let Some(inv) = self.target.try_inverse() {
+					                Self::draw_matrix(ui, &inv);
+					            } else {
+					                ui.colored_label(
+					                    egui::Color32::LIGHT_RED,
+					                    "Not invertible"
+					                );
+					            }
+					        });
+					    });
+					});
+				
+					ui.add_space(4.0);
+					ui.label(format!("det(M) = {:.4}", self.target.determinant()));
+
+					if self.draw_yellow {
+						ui.add_space(10.0);
+						ui.separator();
+						ui.horizontal(|ui| {
+							ui.label(
+								egui::RichText::new("Yellow")
+									.color(egui::Color32::YELLOW)
+									.strong()
+									.size(18.0)
+							
+							);
+							ui.label(
+								egui::RichText::new(" Vector")
+									.strong()
+									.size(18.0)
+							
+							);
+						});
+						ui.horizontal(|ui| {
+							for i in 0..3 {
+								let label = ["X", "Y", "Z"][i];
+								ui.label(format!("{}:", label));
+								let id = ui.make_persistent_id(format!("custom_vec_{}", i));
+								Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
 							}
 						});
+						ui.label("[SHIFT + SPACE] to place vector on XY plane");
 					
-						ui.separator();
+						// --- Transformed Yellow Vector (framed) ---
+						let y_t = self.current * self.selected_vector;
 					
-						// --- Dot-product (column 2) ---
-						ui.vertical(|ui| {
-							ui.label("Dot product:");
+						ui.add_space(6.0);
+						egui::Frame::group(ui.style()).show(ui, |ui| {
+						    ui.label(
+						        egui::RichText::new("Transformed (M·v)")
+						            .color(egui::Color32::YELLOW)
+						            .strong()
+						    );
 						
-							let dot = yellow_t.dot(&purple_t);
-						
-							let color = if dot.abs() < 0.001 {
-								egui::Color32::DARK_GRAY
-							} else if dot > 0.0 {
-								egui::Color32::LIGHT_GREEN
-							} else {
-								egui::Color32::LIGHT_RED
-							};
-						
-							ui.colored_label(color, format!("{:.3}", dot));
+						    ui.horizontal(|ui| {
+						        for i in 0..3 {
+						            let val = y_t[i];
+						            let color = if val.abs() < 0.001 {
+						                egui::Color32::DARK_GRAY
+						            } else if val > 0.0 {
+						                egui::Color32::LIGHT_GREEN
+						            } else {
+						                egui::Color32::LIGHT_RED
+						            };
+						            ui.colored_label(color, format!("{:>6.3}", val));
+						        }
+						    });
 						});
-					});
+					
+					
+					}
+				
+					if self.draw_purple {
+						ui.add_space(10.0);
+						ui.separator();
+						ui.horizontal(|ui| {
+							ui.label(
+								egui::RichText::new("Purple")
+									.color(egui::Color32::from_rgb(160, 32, 240))
+									.strong()
+									.size(18.0)
+							);
+							ui.label(
+								egui::RichText::new(" Vector")
+									.strong()
+									.size(18.0)
+							);
+						});
+					
+						ui.horizontal(|ui| {
+							for i in 0..3 {
+								let id = ui.make_persistent_id(format!("purple_vec_{}", i));
+								Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
+							}
+						});
+						ui.label("[SHIFT + SPACE] to place vector on XY plane");
+					
+						// --- Transformed Purple Vector (framed) ---
+						let p_t = self.current * self.selected_vector_purple;
+
+						ui.add_space(6.0);
+						egui::Frame::group(ui.style()).show(ui, |ui| {
+						    ui.label(
+						        egui::RichText::new("Transformed (M·v)")
+						            .color(egui::Color32::from_rgb(160, 32, 240))
+						            .strong()
+						    );
+						
+						    ui.horizontal(|ui| {
+						        for i in 0..3 {
+						            let val = p_t[i];
+						            let color = if val.abs() < 0.001 {
+						                egui::Color32::DARK_GRAY
+						            } else if val > 0.0 {
+						                egui::Color32::LIGHT_GREEN
+						            } else {
+						                egui::Color32::LIGHT_RED
+						            };
+						            ui.colored_label(color, format!("{:>6.3}", val));
+						        }
+						    });
+						});
+					
+
+					}
+
+					if self.draw_yellow && self.draw_purple {
+					
+						ui.add_space(10.0);
+						ui.separator();
+						ui.heading("Vector Properties");
+						let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
+						if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
+							self.cross_reverse_order = !self.cross_reverse_order;
+						}
+						// --- Cross product coordinates ---
+						let m = self.current;
+						let yellow_t = m * self.selected_vector;
+						let purple_t = m * self.selected_vector_purple;
+					
+						let cross = if self.cross_reverse_order {
+							purple_t.cross(&yellow_t)
+						} else {
+							yellow_t.cross(&purple_t)
+						};
+					
+						ui.add_space(6.0);
+						egui::Frame::group(ui.style()).show(ui, |ui| {
+							ui.horizontal(|ui| {
+							
+								// --- Crossproduct (column 1) ---
+								ui.vertical(|ui| {
+									ui.label("Cross product:");
+								
+									for i in 0..3 {
+										let val = cross[i];
+										let color = if val.abs() < 0.001 {
+											egui::Color32::DARK_GRAY
+										} else if val > 0.0 {
+											egui::Color32::LIGHT_GREEN
+										} else {
+											egui::Color32::LIGHT_RED
+										};
+									
+										ui.colored_label(color, format!("{:>6.2}", val));
+									}
+								});
+							
+								ui.separator();
+							
+								// --- Dot-product (column 2) ---
+								ui.vertical(|ui| {
+									ui.label("Dot product:");
+								
+									let dot = yellow_t.dot(&purple_t);
+								
+									let color = if dot.abs() < 0.001 {
+										egui::Color32::DARK_GRAY
+									} else if dot > 0.0 {
+										egui::Color32::LIGHT_GREEN
+									} else {
+										egui::Color32::LIGHT_RED
+									};
+								
+									ui.colored_label(color, format!("{:.3}", dot));
+								});
+							});
+						});
+					}
 				});
-			}
 
         });
 
