@@ -182,9 +182,7 @@ impl MatrixApp {
 		}
 
 		if input.key_pressed(egui::Key::Space) {
-		    if ctx.pointer_interact_pos().is_some() {
-		    	self.click_to_place = true;
-			}
+			self.click_to_place = true;
 		}
         
         if input.modifiers.command && input.key_pressed(egui::Key::Z) {
