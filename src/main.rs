@@ -573,10 +573,11 @@ impl eframe::App for MatrixApp {
             
             // Render Basis Vectors
             let m = self.current;
-            let vectors = [ (m*Vector3::x(), x_col),
-							(m*Vector3::y(), y_col), 
-                            (m*Vector3::z(), z_col),
-							(m*self.selected_vector, egui::Color32::YELLOW) ];
+            let vectors = [
+				(m*Vector3::x(), x_col),
+				(m*Vector3::y(), y_col), 
+				(m*Vector3::z(), z_col),
+			];
             
             for (v, color) in vectors {
                 draw_arrow(&painter, project(Vector3::zeros()), project(v), color);
