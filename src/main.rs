@@ -7,7 +7,10 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "3D Matrix Visualizer - Also watch 3b1b",
         options,
-        Box::new(|_cc| Box::new(MatrixApp::default())),
+        Box::new(|cc| {
+            setup_fonts(&cc.egui_ctx);
+            Box::new(MatrixApp::default())
+        }),
     )
 }
 
@@ -897,4 +900,25 @@ fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<f32>
             painter.line_segment([p1, p2], egui::Stroke::new(3.0, cols[i]));
         }
     }
+}
+
+fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Ladda emoji-font (fallback)
+    fonts.font_data.insert(
+        "emoji".to_owned(),
+        egui::FontData::from_static(include_bytes!(
+            "../assets/fonts/NotoEmoji-Regular.ttf"
+        )),
+    );
+
+    // Lägg den SIST i proportional-fonten → fallback
+    fonts
+        .families
+        .get_mut(&egui::FontFamily::Proportional)
+        .unwrap()
+        .push("emoji".to_owned());
+
+    ctx.set_fonts(fonts);
 }
