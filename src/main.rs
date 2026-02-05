@@ -1,5 +1,5 @@
-use eframe::egui;
-use nalgebra::{Matrix3, Vector3};
+use eframe::{egui, glow::LAYER_PROVOKING_VERTEX};
+use nalgebra::{Matrix3, Vector3, zero};
 use rand::Rng; // This must be present to use .gen_range()
 
 fn main() -> Result<(), eframe::Error> {
@@ -390,7 +390,12 @@ impl eframe::App for MatrixApp {
 					});
 				
 					ui.add_space(4.0);
-					ui.label(format!("det(M) = {:.4}", self.target.determinant()));
+					let det = self.target.determinant();
+					let rank = matrix_rank_approx(&self.target, 1e-6);
+
+					ui.label(format!("det(M) = {:.4}", det));
+					ui.label(format!("rank(M) = {}", rank));
+
 
 					if self.draw_yellow {
 						ui.add_space(10.0);
@@ -630,7 +635,14 @@ impl eframe::App for MatrixApp {
             let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
             draw_grid_3d(&painter, &project, &self.current, grid_c, self.grid_size);
             
-			if self.draw_determinant { draw_unit_cube(&painter, &project, &self.current, self.draw_determinant); }
+			if self.draw_determinant {
+			    draw_determinant_geometry(
+			        &painter,
+			        &project,
+			        &self.current,
+			    );
+			}
+
             
             draw_axes_3d(&painter, &project);
             
@@ -734,12 +746,101 @@ fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> eg
 	    let center_screen = project(center_world);
 	
 	    painter.text(
-	        center_screen,
+			center_screen,
 	        egui::Align2::CENTER_CENTER,
 	        format!("Vol: {:.2}", abs_det),
 	        egui::FontId::proportional(14.0), // Changed from .bold()
 	        egui::Color32::WHITE
 	    );
+	}
+}
+
+
+fn draw_determinant_geometry(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    m: &Matrix3<f32>,
+) {
+    let eps = 1e-6;
+    match matrix_rank_approx(m, eps) {
+        3 => {
+            draw_unit_cube(painter, project, m, true);
+        }
+        2 => {
+            let (a, b) = best_parallelogram_basis(m);
+            let poly = vec![
+                project(Vector3::zeros()),
+                project(a),
+                project(a + b),
+                project(b),
+            ];
+			// Kamera-normal i world space
+			let view_normal = Vector3::new(0.0, 0.0, 1.0);
+
+			// Orientering (signerad area)
+			let signed_area = a.cross(&b).dot(&view_normal);
+
+			let color = if signed_area >= 0.0 {
+			    egui::Color32::from_rgba_unmultiplied(120, 200, 120, 60) // grön
+			} else {
+			    egui::Color32::from_rgba_unmultiplied(200, 80, 80, 60)   // röd
+			};
+
+            painter.add(egui::Shape::convex_polygon(
+                poly,
+                color,
+                egui::Stroke::new(1.5, egui::Color32::WHITE),
+            ));
+        }
+        1 => {
+            let v = m.column(0).into_owned();
+            painter.line_segment(
+                [project(Vector3::zeros()), project(v)],
+                egui::Stroke::new(2.5, egui::Color32::LIGHT_RED),
+            );
+        }
+        _ => {}
+    }
+}
+
+
+fn matrix_rank_approx(m: &Matrix3<f32>, eps: f32) -> usize {
+    let v = m.column(0);
+    let u = m.column(1);
+    let w = m.column(2);
+
+    let vu = v.cross(&u).norm_squared();
+    let vw = v.cross(&w).norm_squared();
+    let uw = u.cross(&w).norm_squared();
+
+    if vu > eps && vw > eps && uw > eps {
+        3
+    } else if vu > eps || vw > eps || uw > eps {
+        2
+    } else if v.norm_squared() > eps || u.norm_squared() > eps || w.norm_squared() > eps {
+        1
+    } else {
+        0
+    }
+}
+
+
+
+fn best_parallelogram_basis(m: &Matrix3<f32>) -> (Vector3<f32>, Vector3<f32>) {
+	let v = m.column(0).into_owned();
+	let u = m.column(1).into_owned();
+	let w = m.column(2).into_owned();
+
+	let vu = v.cross(&u).norm_squared();
+	let vw = v.cross(&w).norm_squared();
+	let uw = u.cross(&w).norm_squared();
+
+	if vu >= vw && vu >= uw {
+		(v, u)
+	} else if vw >= uw {
+		(v, w)
+	} else {
+		(u, w)
 	}
 }
 
@@ -922,4 +1023,5 @@ fn setup_fonts(ctx: &egui::Context) {
 
     ctx.set_fonts(fonts);
 }
+
 
