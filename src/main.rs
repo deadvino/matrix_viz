@@ -43,6 +43,8 @@ struct MatrixApp {
 	// Eigen visualizations
 	draw_flow_field: bool,
 	draw_eigen_rays: bool,
+	draw_unit_sphere: bool,
+
 
     perspective: bool,
     grid_size: i32,
@@ -77,6 +79,7 @@ impl Default for MatrixApp {
 
 			draw_eigen_rays: false,
 			draw_flow_field: false,
+			draw_unit_sphere: false,
 
             perspective: true,
             grid_size: 5,
@@ -339,6 +342,8 @@ impl eframe::App for MatrixApp {
 					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
 					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays");
 					ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
+					ui.checkbox(&mut self.draw_unit_sphere, "⚪ Unit Sphere Deformation");
+
 					
 					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
 					ui.checkbox(&mut self.draw_purple, egui::RichText::new("Purple Vector").color(egui::Color32::from_rgb(160, 32, 240)).strong());
@@ -404,6 +409,13 @@ impl eframe::App for MatrixApp {
 
 					ui.label(format!("det(M) = {:.4}", det));
 					ui.label(format!("rank(M) = {}", rank));
+					if real_eigenpairs_approx(&self.current, 1e-3).is_empty() {
+					    ui.colored_label(
+					        egui::Color32::GRAY,
+					        "No real eigenvectors (complex eigenvalues)"
+					    );
+					}
+
 
 
 					if self.draw_yellow {
@@ -659,8 +671,14 @@ impl eframe::App for MatrixApp {
 			    draw_determinant_geometry(
 			        &painter,
 			        &project,
-			        &self.current,
+			        &self.current, 
 			    );
+			}
+
+			if self.draw_unit_sphere
+			    && matrix_rank_approx(&self.current, 1e-6) >= 2
+			{
+			    draw_deformed_sphere(&painter, &project, &self.current);
 			}
 
 			if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
@@ -1140,3 +1158,57 @@ fn is_near_identity(m: &Matrix3<f32>, eps: f32) -> bool {
     (m - Matrix3::identity()).norm() < eps
 }
 
+
+fn sample_unit_sphere(n_theta: usize, n_phi: usize) -> Vec<Vector3<f32>> {
+    let mut pts = Vec::new();
+
+    for i in 0..=n_theta {
+        let theta = std::f32::consts::PI * i as f32 / n_theta as f32;
+        for j in 0..=n_phi {
+            let phi = 2.0 * std::f32::consts::PI * j as f32 / n_phi as f32;
+
+            pts.push(Vector3::new(
+                theta.sin() * phi.cos(),
+                theta.sin() * phi.sin(),
+                theta.cos(),
+            ));
+        }
+    }
+    pts
+}
+
+
+fn draw_deformed_sphere(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    m: &Matrix3<f32>,
+) {
+    let sphere = sample_unit_sphere(16, 32);
+
+    let stroke = egui::Stroke::new(
+        1.0,
+        egui::Color32::from_rgba_unmultiplied(200, 200, 255, 80),
+    );
+
+    let rows = 17; // n_theta + 1
+    let cols = 33; // n_phi + 1
+
+    for i in 0..rows {
+        for j in 0..cols {
+            let idx = i * cols + j;
+            let p = m * sphere[idx];
+
+            // longitud
+            if j + 1 < cols {
+                let q = m * sphere[idx + 1];
+                painter.line_segment([project(p), project(q)], stroke);
+            }
+
+            // latitud
+            if i + 1 < rows {
+                let q = m * sphere[idx + cols];
+                painter.line_segment([project(p), project(q)], stroke);
+            }
+        }
+    }
+}
