@@ -337,11 +337,11 @@ impl eframe::App for MatrixApp {
 					ui.heading("Feature Toggles");
 					ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
 					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
-					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
-					ui.checkbox(&mut self.draw_purple, egui::RichText::new("Purple Vector").color(egui::Color32::from_rgb(160, 32, 240)).strong());
 					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays");
 					ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
-
+					
+					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
+					ui.checkbox(&mut self.draw_purple, egui::RichText::new("Purple Vector").color(egui::Color32::from_rgb(160, 32, 240)).strong());
 					if self.draw_yellow && self.draw_purple {
 						ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
 						ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
