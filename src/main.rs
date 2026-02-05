@@ -678,7 +678,9 @@ impl eframe::App for MatrixApp {
 			if self.draw_unit_sphere
 			    && matrix_rank_approx(&self.current, 1e-6) >= 2
 			{
-			    draw_deformed_sphere(&painter, &project, &self.current);
+			    //draw_deformed_sphere(&painter, &project, &self.current);
+			    draw_colored_unit_sphere(&painter, &project, &self.current);
+				
 			}
 
 			if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
@@ -1210,5 +1212,35 @@ fn draw_deformed_sphere(
                 painter.line_segment([project(p), project(q)], stroke);
             }
         }
+    }
+}
+
+
+fn draw_colored_unit_sphere(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    m: &Matrix3<f32>,
+) {
+    let points = sample_unit_sphere(18, 36);
+
+    for p in points {
+        let p_hat = p.normalize();
+        let mp = m * p_hat;
+        let delta = mp - p_hat;
+
+        let radial = delta.dot(&p_hat).abs();
+        let tangent = (delta - p_hat * delta.dot(&p_hat)).norm();
+
+        let t = (radial / (radial + tangent + 1e-6)).clamp(0.0, 1.0);
+
+        // röd → gul → grön
+        let color = egui::Color32::from_rgb(
+            (255.0 * (1.0 - t.powi(2))) as u8,
+            (255.0 * t.powi(2)) as u8,
+            80,
+        );
+
+        let screen_pos = project(mp);
+        painter.circle_filled(screen_pos, 2.0, color);
     }
 }
