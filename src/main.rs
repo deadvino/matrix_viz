@@ -663,9 +663,10 @@ impl eframe::App for MatrixApp {
 			    );
 			}
 
-			if self.draw_eigen_rays {
+			if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
 			    draw_eigen_rays(&painter, &project, &self.current);
 			}
+
 
 
             
@@ -1133,3 +1134,9 @@ fn draw_flow_field(
         }
     }
 }
+
+
+fn is_near_identity(m: &Matrix3<f32>, eps: f32) -> bool {
+    (m - Matrix3::identity()).norm() < eps
+}
+
