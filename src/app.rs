@@ -313,22 +313,10 @@ impl MatrixApp {
         }
         self.recalculate_target();
     }
-}
-
-fn smoothstep(t: f32) -> f32 { t * t * (3.0 - 2.0 * t) }
 
 
-impl eframe::App for MatrixApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.handle_hotkeys(ctx);
-        let dt = ctx.input(|i| i.unstable_dt).max(1e-6);
-
-		let x_col = egui::Color32::from_hex("#83B366").unwrap();
-		let y_col = egui::Color32::from_hex("#FF7154").unwrap();
-		let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
-
-        // --- SIDEBAR ---
-        egui::SidePanel::left("controls")
+	fn draw_sidebar(&mut self, ctx: &egui::Context) {
+		egui::SidePanel::left("controls")
 			.width_range(300.0..=350.0)
 			.show(ctx, |ui| {
 				egui::ScrollArea::vertical()
@@ -604,6 +592,23 @@ impl eframe::App for MatrixApp {
 
         });
 
+	}
+}
+
+fn smoothstep(t: f32) -> f32 { t * t * (3.0 - 2.0 * t) }
+
+
+impl eframe::App for MatrixApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.handle_hotkeys(ctx);
+        let dt = ctx.input(|i| i.unstable_dt).max(1e-6);
+
+		let x_col = egui::Color32::from_hex("#83B366").unwrap();
+		let y_col = egui::Color32::from_hex("#FF7154").unwrap();
+		let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
+
+        // --- SIDEBAR ---
+        self.draw_sidebar(ctx);
         // --- VIEWPORT ---
         egui::CentralPanel::default().show(ctx, |ui| {
             let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
@@ -761,3 +766,5 @@ impl eframe::App for MatrixApp {
         ctx.request_repaint();
     }
 }
+
+
