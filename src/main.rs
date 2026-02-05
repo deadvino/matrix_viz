@@ -40,6 +40,10 @@ struct MatrixApp {
 	draw_determinant: bool,
     draw_planes: bool,
 
+	// Eigen visualizations
+	draw_flow_field: bool,
+	draw_eigen_rays: bool,
+
     perspective: bool,
     grid_size: i32,
 	grid_opacity: u8, // 0 is invisible, 255 is fully opaque
@@ -70,6 +74,9 @@ impl Default for MatrixApp {
 			draw_parallelogram: false,
 			draw_cross_vector: false,
 			draw_determinant: true,
+
+			draw_eigen_rays: false,
+			draw_flow_field: false,
 
             perspective: true,
             grid_size: 5,
@@ -332,6 +339,8 @@ impl eframe::App for MatrixApp {
 					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
 					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
 					ui.checkbox(&mut self.draw_purple, egui::RichText::new("Purple Vector").color(egui::Color32::from_rgb(160, 32, 240)).strong());
+					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays");
+					ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
 
 					if self.draw_yellow && self.draw_purple {
 						ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
@@ -630,6 +639,17 @@ impl eframe::App for MatrixApp {
             }
 
             // Render Scene
+
+			if self.draw_flow_field {
+			    draw_flow_field(
+			        &painter,
+			        &project,
+			        &self.current,
+			        0.8, // spacing
+			        6,   // extent
+			    );
+			}
+
             if self.draw_planes && !self.current.is_identity(1e-10)  { draw_origin_planes(&painter, &project, self.grid_size); }
             
             let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
@@ -642,6 +662,11 @@ impl eframe::App for MatrixApp {
 			        &self.current,
 			    );
 			}
+
+			if self.draw_eigen_rays {
+			    draw_eigen_rays(&painter, &project, &self.current);
+			}
+
 
             
             draw_axes_3d(&painter, &project);
@@ -1025,3 +1050,86 @@ fn setup_fonts(ctx: &egui::Context) {
 }
 
 
+fn real_eigenpairs_approx(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f32)> {
+    let mut result = Vec::new();
+
+    let dirs = [
+        Vector3::x(),
+        Vector3::y(),
+        Vector3::z(),
+        Vector3::new(1.0, 1.0, 0.0).normalize(),
+        Vector3::new(1.0, 0.0, 1.0).normalize(),
+        Vector3::new(0.0, 1.0, 1.0).normalize(),
+    ];
+
+    for v in dirs {
+        let mv = m * v;
+
+        let denom = v.dot(&v);
+        if denom.abs() < eps {
+            continue;
+        }
+
+        let lambda = mv.dot(&v) / denom;
+
+        if (mv - v * lambda).norm() < eps {
+            result.push((v, lambda));
+        }
+    }
+
+    result
+}
+
+
+fn draw_eigen_rays(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    m: &Matrix3<f32>,
+) {
+    let rays = real_eigenpairs_approx(m, 1e-3);
+
+    for (v, lambda) in rays {
+        let dir = v.normalize() * 10.0;
+        let color = if lambda >= 0.0 {
+            egui::Color32::from_rgb(120, 160, 255) // blå
+        } else {
+            egui::Color32::from_rgb(220, 80, 80)   // röd
+        };
+
+        let stroke = egui::Stroke::new(
+            (lambda.abs() * 2.0).clamp(1.5, 4.0),
+            color,
+        );
+
+        painter.line_segment(
+            [project(-dir), project(dir)],
+            stroke,
+        );
+    }
+}
+
+
+fn draw_flow_field(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    m: &Matrix3<f32>,
+    spacing: f32,
+    extent: i32,
+) {
+    for ix in -extent..=extent {
+        for iy in -extent..=extent {
+            let v = Vector3::new(ix as f32 * spacing, iy as f32 * spacing, 0.0);
+            let mv = m * v;
+
+            let dir = mv - v;
+            if dir.norm() < 0.01 { continue; }
+
+            let end = v + dir.normalize() * spacing * 0.8;
+
+            painter.line_segment(
+                [project(v), project(end)],
+                egui::Stroke::new(1.2, egui::Color32::from_rgba_unmultiplied(200, 200, 200, 120)),
+            );
+        }
+    }
+}
