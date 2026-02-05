@@ -315,6 +315,98 @@ impl MatrixApp {
     }
 
 
+	fn resulting_matrix(&mut self, ui: &mut egui::Ui) {
+		ui.heading("Resulting Matrix");
+				
+					egui::Frame::group(ui.style()).show(ui, |ui| {
+					    ui.horizontal(|ui| {
+						
+					        // --- M_total ---
+					        ui.vertical(|ui| {
+					            ui.label("M");
+					            Self::draw_matrix(ui, &self.target);
+					        });
+						
+					        ui.separator();
+						
+					        // --- Invers ---
+					        ui.vertical(|ui| {
+					            ui.horizontal(|ui| {
+								    ui.label("M");
+								    ui.label(
+								        egui::RichText::new("-1")
+								            .small()
+								            .raised()
+								    );
+								});
+							
+					            if let Some(inv) = self.target.try_inverse() {
+					                Self::draw_matrix(ui, &inv);
+					            } else {
+					                ui.colored_label(
+					                    egui::Color32::LIGHT_RED,
+					                    "Not invertible"
+					                );
+					            }
+					        });
+					    });
+					});
+	}
+
+
+	fn draw_vector_ui(
+	    ui: &mut egui::Ui,
+	    name: &str,
+	    color: egui::Color32,
+	    vector: &mut nalgebra::Vector3<f32>, // Eller den typ du använder
+	    transformation_matrix: &nalgebra::Matrix3<f32>,
+	    input_buffer: &mut String,
+	    id_prefix: &str,
+	) {
+	    ui.add_space(10.0);
+	    ui.separator();
+	
+	    // Header: "Yellow Vector" / "Purple Vector"
+	    ui.horizontal(|ui| {
+	        ui.label(egui::RichText::new(name).color(color).strong().size(18.0));
+	        ui.label(egui::RichText::new(" Vector").strong().size(18.0));
+	    });
+
+	    // Input fält för X, Y, Z
+	    ui.horizontal(|ui| {
+	        for i in 0..3 {
+	            let label = ["X", "Y", "Z"][i];
+	            ui.label(format!("{}:", label));
+	            let id = ui.make_persistent_id(format!("{}_{}", id_prefix, i));
+	            Self::handle_buffered_input(ui, id, input_buffer, &mut vector[i]);
+	        }
+	    });
+	    ui.label("[SHIFT + SPACE] to place vector on XY plane");
+
+	    // Transformation
+	    let transformed = *transformation_matrix * *vector;
+
+	    ui.add_space(6.0);
+	    egui::Frame::group(ui.style()).show(ui, |ui| {
+	        ui.label(egui::RichText::new("Transformed (M·v)").color(color).strong());
+
+	        ui.horizontal(|ui| {
+	            for i in 0..3 {
+	                let val = transformed[i];
+	                let val_color = if val.abs() < 0.001 {
+	                    egui::Color32::DARK_GRAY
+	                } else if val > 0.0 {
+	                    egui::Color32::LIGHT_GREEN
+	                } else {
+	                    egui::Color32::LIGHT_RED
+	                };
+	                ui.colored_label(val_color, format!("{:>6.3}", val));
+	            }
+	        });
+	    });
+	}
+
+
 	fn draw_sidebar(&mut self, ctx: &egui::Context) {
 		egui::SidePanel::left("controls")
 			.width_range(300.0..=350.0)
@@ -363,41 +455,7 @@ impl MatrixApp {
             		self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
 				
             		ui.separator();
-            		ui.heading("Resulting Matrix");
-				
-					egui::Frame::group(ui.style()).show(ui, |ui| {
-					    ui.horizontal(|ui| {
-						
-					        // --- M_total ---
-					        ui.vertical(|ui| {
-					            ui.label("M");
-					            Self::draw_matrix(ui, &self.target);
-					        });
-						
-					        ui.separator();
-						
-					        // --- Invers ---
-					        ui.vertical(|ui| {
-					            ui.horizontal(|ui| {
-								    ui.label("M");
-								    ui.label(
-								        egui::RichText::new("-1")
-								            .small()
-								            .raised()
-								    );
-								});
-							
-					            if let Some(inv) = self.target.try_inverse() {
-					                Self::draw_matrix(ui, &inv);
-					            } else {
-					                ui.colored_label(
-					                    egui::Color32::LIGHT_RED,
-					                    "Not invertible"
-					                );
-					            }
-					        });
-					    });
-					});
+            		self.resulting_matrix(ui);
 				
 					ui.add_space(4.0);
 					let det = self.target.determinant();
@@ -413,117 +471,30 @@ impl MatrixApp {
 					}
 
 
-
 					if self.draw_yellow {
-						ui.add_space(10.0);
-						ui.separator();
-						ui.horizontal(|ui| {
-							ui.label(
-								egui::RichText::new("Yellow")
-									.color(egui::Color32::YELLOW)
-									.strong()
-									.size(18.0)
-							
-							);
-							ui.label(
-								egui::RichText::new(" Vector")
-									.strong()
-									.size(18.0)
-							
-							);
-						});
-						ui.horizontal(|ui| {
-							for i in 0..3 {
-								let label = ["X", "Y", "Z"][i];
-								ui.label(format!("{}:", label));
-								let id = ui.make_persistent_id(format!("custom_vec_{}", i));
-								Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector[i]);
-							}
-						});
-						ui.label("[SHIFT + SPACE] to place vector on XY plane");
-					
-						// --- Transformed Yellow Vector (framed) ---
-						let y_t = self.current * self.selected_vector;
-					
-						ui.add_space(6.0);
-						egui::Frame::group(ui.style()).show(ui, |ui| {
-						    ui.label(
-						        egui::RichText::new("Transformed (M·v)")
-						            .color(egui::Color32::YELLOW)
-						            .strong()
-						    );
-						
-						    ui.horizontal(|ui| {
-						        for i in 0..3 {
-						            let val = y_t[i];
-						            let color = if val.abs() < 0.001 {
-						                egui::Color32::DARK_GRAY
-						            } else if val > 0.0 {
-						                egui::Color32::LIGHT_GREEN
-						            } else {
-						                egui::Color32::LIGHT_RED
-						            };
-						            ui.colored_label(color, format!("{:>6.3}", val));
-						        }
-						    });
-						});
-					
-					
+					    Self::draw_vector_ui(
+					        ui,
+					        "Yellow",
+					        egui::Color32::YELLOW,
+					        &mut self.selected_vector,
+					        &self.current,
+					        &mut self.input_buffer,
+					        "yellow_vec"
+					    );
 					}
-				
+					
 					if self.draw_purple {
-						ui.add_space(10.0);
-						ui.separator();
-						ui.horizontal(|ui| {
-							ui.label(
-								egui::RichText::new("Purple")
-									.color(egui::Color32::from_rgb(160, 32, 240))
-									.strong()
-									.size(18.0)
-							);
-							ui.label(
-								egui::RichText::new(" Vector")
-									.strong()
-									.size(18.0)
-							);
-						});
-					
-						ui.horizontal(|ui| {
-							for i in 0..3 {
-								let id = ui.make_persistent_id(format!("purple_vec_{}", i));
-								Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.selected_vector_purple[i]);
-							}
-						});
-						ui.label("[SHIFT + SPACE] to place vector on XY plane");
-					
-						// --- Transformed Purple Vector (framed) ---
-						let p_t = self.current * self.selected_vector_purple;
-
-						ui.add_space(6.0);
-						egui::Frame::group(ui.style()).show(ui, |ui| {
-						    ui.label(
-						        egui::RichText::new("Transformed (M·v)")
-						            .color(egui::Color32::from_rgb(160, 32, 240))
-						            .strong()
-						    );
-						
-						    ui.horizontal(|ui| {
-						        for i in 0..3 {
-						            let val = p_t[i];
-						            let color = if val.abs() < 0.001 {
-						                egui::Color32::DARK_GRAY
-						            } else if val > 0.0 {
-						                egui::Color32::LIGHT_GREEN
-						            } else {
-						                egui::Color32::LIGHT_RED
-						            };
-						            ui.colored_label(color, format!("{:>6.3}", val));
-						        }
-						    });
-						});
-					
-
+					    Self::draw_vector_ui(
+					        ui,
+					        "Purple",
+					        egui::Color32::from_rgb(160, 32, 240),
+					        &mut self.selected_vector_purple,
+					        &self.current,
+					        &mut self.input_buffer,
+					        "purple_vec"
+					    );
 					}
+					
 
 					if self.draw_yellow && self.draw_purple {
 					
@@ -609,6 +580,7 @@ impl eframe::App for MatrixApp {
 
         // --- SIDEBAR ---
         self.draw_sidebar(ctx);
+
         // --- VIEWPORT ---
         egui::CentralPanel::default().show(ctx, |ui| {
             let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
