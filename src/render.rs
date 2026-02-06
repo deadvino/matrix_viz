@@ -4,6 +4,7 @@ use nalgebra::{Matrix3, Vector3};
 use crate::math::matrix_rank_approx;
 use crate::math::best_parallelogram_basis;
 use crate::math::real_eigenpairs_approx;
+use crate::math::real_eigenpairs_exact;
 use crate::math::sample_unit_sphere;
 
 use crate::app::MatrixApp;
@@ -178,7 +179,7 @@ pub fn draw_eigen_rays(
     project: &impl Fn(Vector3<f32>) -> egui::Pos2,
     m: &Matrix3<f32>,
 ) {
-    let rays = real_eigenpairs_approx(m, 1e-3);
+    let rays = real_eigenpairs_exact(m, 1e-4);
 
     for (v, lambda) in rays {
         let dir = v.normalize() * 10.0;
