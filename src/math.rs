@@ -60,37 +60,47 @@ pub fn real_eigenpairs_approx(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, 
 
 pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f32)> {
     let mut result = Vec::new();
-
-    // Vi tvingar nalgebra att använda den generella dekomponeringen 
-    // genom att använda .eigen() på en ägd matris.
-    // Om .eigen() inte hittas, använd .complex_eigenvalues() 
-    // i kombination med att vi löser (M - λI)v = 0 manuellt för varje λ.
+    let values = m.complex_eigenvalues();
     
-    // 1. Hitta egenvärden (denna metod finns nästan alltid)
-	let values = m.complex_eigenvalues();
-	
-	for lambda_complex in values.iter() {
-	    if lambda_complex.im.abs() < eps {
-	        let lambda = lambda_complex.re;
-		
-	        // 2. Lös (M - λI)v = 0 för att hitta egenvektorn
-	        // Vi skapar matrisen (M - λI)
-	        let mut system = *m;
-	        system[(0,0)] -= lambda;
-	        system[(1,1)] -= lambda;
-	        system[(2,2)] -= lambda;
-		
-	        // 3. Använd SVD för att hitta nollrummet (kernel)
-	        // Vektorn som motsvarar det minsta singulärvärdet är vår egenvektor.
-	        let svd = system.svd(false, true);
-	        if let Some(v_matrix) = svd.v_t {
-	            // Sista raden i V^T (eller sista kolumnen i V) är egenvektorn
-	            let v = v_matrix.row(2).transpose().normalize();
-	            result.push((v, lambda));
-	        }
-	    }
-	}
+    // 1. Sortera ut unika reella egenvärden för att slippa dubbelarbete
+    let mut unique_lambdas: Vec<f32> = Vec::new();
+    for l in values.iter() {
+        if l.im.abs() < eps {
+            if !unique_lambdas.iter().any(|&already| (already - l.re).abs() < eps) {
+                unique_lambdas.push(l.re);
+            }
+        }
+    }
 
+    // 2. Hitta alla vektorer för varje unikt egenvärde
+    for lambda in unique_lambdas {
+        let mut system = *m;
+        system[(0,0)] -= lambda;
+        system[(1,1)] -= lambda;
+        system[(2,2)] -= lambda;
+        
+        let svd = system.svd(false, true);
+        let v_t = svd.v_t.unwrap();
+
+        for j in 0..3 {
+            // Om singulärvärdet är nära noll, har vi hittat en egenvektor
+            if svd.singular_values[j].abs() < eps * 10.0 {
+                let v = v_t.row(j).transpose().normalize();
+                
+                // Undvik att lägga till v om vi redan har v eller -v i listan
+                // Inuti loopen för att rensa dubbletter:
+				if !result.iter().any(|(old_v, old_l): &(Vector3<f32>, f32)| {
+				    let same_lambda = (old_l - lambda).abs() < eps;
+				    // .abs() på dot-product fångar både v och -v (parallella vektorer)
+				    let parallel = old_v.dot(&v).abs() > (1.0 - eps);
+				
+				    same_lambda && parallel
+				}) {
+				    result.push((v, lambda));
+				}
+            }
+        }
+    }
     result
 }
 
