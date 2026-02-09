@@ -3,7 +3,6 @@ use nalgebra::{Matrix3, Vector3};
 
 use crate::math::matrix_rank_approx;
 use crate::math::best_parallelogram_basis;
-use crate::math::real_eigenpairs_approx;
 use crate::math::real_eigenpairs_exact;
 use crate::math::sample_unit_sphere;
 

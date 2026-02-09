@@ -1,6 +1,5 @@
 use nalgebra::{Vector3, Matrix3};
-use nalgebra::RealField;
-use nalgebra::ComplexField;
+
 
 pub fn sample_unit_sphere(n_theta: usize, n_phi: usize) -> Vec<Vector3<f32>> {
     let mut pts = Vec::new();

@@ -446,6 +446,7 @@ impl MatrixApp {
 				
 					ui.add_space(6.0);
             		ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
+					ui.add(egui::Slider::new(&mut self.grid_size, 1..=20).text("Grid Size"));
 					ui.add(
 					    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
 					        .text("Animation Speed")
