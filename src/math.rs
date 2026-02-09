@@ -25,38 +25,6 @@ pub fn is_near_identity(m: &Matrix3<f32>, eps: f32) -> bool {
 }
 
 
-pub fn real_eigenpairs_approx(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f32)> {
-    let mut result = Vec::new();
-
-    let dirs = [
-        Vector3::x(),
-        Vector3::y(),
-        Vector3::z(),
-        Vector3::new(1.0, 1.0, 0.0).normalize(),
-        Vector3::new(1.0, 0.0, 1.0).normalize(),
-        Vector3::new(0.0, 1.0, 1.0).normalize(),
-    ];
-
-    for v in dirs {
-        let mv = m * v;
-
-        let denom = v.dot(&v);
-        if denom.abs() < eps {
-            continue;
-        }
-
-        let lambda = mv.dot(&v) / denom;
-
-        if (mv - v * lambda).norm() < eps {
-            result.push((v, lambda));
-        }
-    }
-
-    result
-}
-
-
-
 pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f32)> {
     let mut result = Vec::new();
     let values = m.complex_eigenvalues();

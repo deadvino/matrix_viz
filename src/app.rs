@@ -4,9 +4,8 @@ use rand::Rng; // This must be present to use .gen_range()
 
 
 use crate::math::is_near_identity;
-use crate::math::real_eigenpairs_approx;
 use crate::math::matrix_rank_approx;
-
+use crate::math::real_eigenpairs_exact;
 
 use crate::render::draw_grid_3d;
 use crate::render::draw_axes_3d;
@@ -466,7 +465,7 @@ impl MatrixApp {
 
 					ui.label(format!("det(M) = {:.4}", det));
 					ui.label(format!("rank(M) = {}", rank));
-					if real_eigenpairs_approx(&self.current, 1e-3).is_empty() {
+					if real_eigenpairs_exact(&self.current, 1e-3).is_empty() {
 					    ui.colored_label(
 					        egui::Color32::GRAY,
 					        "No real eigenvectors (complex eigenvalues)"
