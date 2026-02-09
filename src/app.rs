@@ -181,6 +181,8 @@ impl MatrixApp {
         if input.key_pressed(egui::Key::P) { self.draw_planes = !self.draw_planes; }
         if input.key_pressed(egui::Key::V) { self.perspective = !self.perspective; }
 		if input.key_pressed(egui::Key::D) { self.draw_determinant = !self.draw_determinant; }
+		if input.key_pressed(egui::Key::E) { self.draw_eigen_rays = !self.draw_eigen_rays; }
+		if input.key_pressed(egui::Key::U) { self.draw_unit_sphere = !self.draw_unit_sphere; }
         if input.key_pressed(egui::Key::C) { self.history.clear(); self.recalculate_target(); }
         
         if input.key_pressed(egui::Key::A) && !self.animating {
@@ -428,9 +430,9 @@ impl MatrixApp {
 					ui.heading("Feature Toggles");
 					ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
 					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
-					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays");
+					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays [E]");
 					ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
-					ui.checkbox(&mut self.draw_unit_sphere, "⚪ Unit Sphere Deformation");
+					ui.checkbox(&mut self.draw_unit_sphere, "⚪ Unit Sphere Deformation [U]");
 
 					
 					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
