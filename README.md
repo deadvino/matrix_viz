@@ -75,7 +75,7 @@ Clone the repository:
 
 Run the project:
 Run in repository directory:
-    cargo run --release
+    ```cargo run --release```
 
 ---
 
