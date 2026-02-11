@@ -74,7 +74,7 @@ Clone the repository:
     cd matrix-visualizer
 
 Run the project:
-
+Run in repository directory:
     cargo run --release
 
 ---
