@@ -45,7 +45,8 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 | **A** | Apply current matrix to history |
 | **Ctrl + Z** | Undo last applied transformation |
 | **C** | Clear history and reset to Identity |
-| **Space** | Hold to drag the custom vector |
+| **Space** | Hold to drag vector |
+| **Shift + Space** | Hold to drag 2nd vector |
 
 ---
 
@@ -74,8 +75,10 @@ Clone the repository:
     cd matrix-visualizer
 
 Run the project:
-Run in repository directory:
-    ```cargo run --release```
+
+in repository directory:
+
+    cargo run --release
 
 ---
 
