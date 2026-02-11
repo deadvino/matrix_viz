@@ -327,7 +327,7 @@ impl MatrixApp {
 	fn generate_random_orthogonal_matrix(&mut self) {
 	    let mut rng = rand::thread_rng();
 
-	    // Generate random unit quaternion (uniform rotation)
+	    // --- Generate uniform random quaternion (rotation) ---
 	    let u1: f32 = rng.r#gen();
 	    let u2: f32 = rng.r#gen();
 	    let u3: f32 = rng.r#gen();
@@ -343,8 +343,8 @@ impl MatrixApp {
 	    let y = sqrt_u1 * theta2.sin();
 	    let z = sqrt_u1 * theta2.cos();
 
-	    // Convert quaternion to 3x3 rotation matrix
-	    self.input = [
+	    // --- Convert quaternion to rotation matrix (det = +1) ---
+	    let mut m = [
 	        [
 	            1.0 - 2.0 * (y * y + z * z),
 	            2.0 * (x * y - z * w),
@@ -362,8 +362,18 @@ impl MatrixApp {
 	        ],
 	    ];
 
+	    // --- With 50% probability, flip determinant to -1 ---
+	    if rng.gen_bool(0.5) {
+	        // Negate one column (e.g., first column)
+	        for i in 0..3 {
+	            m[i][0] = -m[i][0];
+	        }
+	    }
+
+	    self.input = m;
 	    self.recalculate_target();
 	}
+
 
 
 
