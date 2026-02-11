@@ -194,6 +194,10 @@ impl MatrixApp {
 		    self.recalculate_target();
 		}
 
+		if input.key_pressed(egui::Key::O) && !self.animating {
+			self.generate_random_orthogonal_matrix();
+		}
+
 		if input.key_pressed(egui::Key::R) && !self.animating {
 			if input.modifiers.shift {
 		        self.generate_random_matrix(1.0, 1.0); // t.ex. -1..1
@@ -230,6 +234,10 @@ impl MatrixApp {
 		// --- NEW RANDOM BUTTON ---
         if ui.button("🎲 Generate Random [R]").clicked()  {
             self.generate_random_matrix(3.0, 0.5);
+        }
+        ui.add_space(8.0);
+		if ui.button("🎲 Generate Random Orthogonal [O]").clicked()  {
+            self.generate_random_orthogonal_matrix();
         }
         ui.add_space(8.0);
 
@@ -314,6 +322,49 @@ impl MatrixApp {
         }
         self.recalculate_target();
     }
+
+
+	fn generate_random_orthogonal_matrix(&mut self) {
+	    let mut rng = rand::thread_rng();
+
+	    // Generate random unit quaternion (uniform rotation)
+	    let u1: f32 = rng.r#gen();
+	    let u2: f32 = rng.r#gen();
+	    let u3: f32 = rng.r#gen();
+
+	    let sqrt1_minus_u1 = (1.0 - u1).sqrt();
+	    let sqrt_u1 = u1.sqrt();
+
+	    let theta1 = 2.0 * std::f32::consts::PI * u2;
+	    let theta2 = 2.0 * std::f32::consts::PI * u3;
+
+	    let w = sqrt1_minus_u1 * theta1.sin();
+	    let x = sqrt1_minus_u1 * theta1.cos();
+	    let y = sqrt_u1 * theta2.sin();
+	    let z = sqrt_u1 * theta2.cos();
+
+	    // Convert quaternion to 3x3 rotation matrix
+	    self.input = [
+	        [
+	            1.0 - 2.0 * (y * y + z * z),
+	            2.0 * (x * y - z * w),
+	            2.0 * (x * z + y * w),
+	        ],
+	        [
+	            2.0 * (x * y + z * w),
+	            1.0 - 2.0 * (x * x + z * z),
+	            2.0 * (y * z - x * w),
+	        ],
+	        [
+	            2.0 * (x * z - y * w),
+	            2.0 * (y * z + x * w),
+	            1.0 - 2.0 * (x * x + y * y),
+	        ],
+	    ];
+
+	    self.recalculate_target();
+	}
+
 
 
 	fn resulting_matrix(&mut self, ui: &mut egui::Ui) {
