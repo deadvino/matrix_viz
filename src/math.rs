@@ -35,7 +35,7 @@ pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f
     let mut result = Vec::new();
     let values = m.complex_eigenvalues();
     
-    // 1. Sortera ut unika reella egenvärden för att slippa dubbelarbete
+    // 1. Isolate unique real eigenvalues
     let mut unique_lambdas: Vec<f32> = Vec::new();
     for l in values.iter() {
         if l.im.abs() < eps {
@@ -45,7 +45,7 @@ pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f
         }
     }
 
-    // 2. Hitta alla vektorer för varje unikt egenvärde
+    // 2. Find all vectors for every unique eigenvalue
     for lambda in unique_lambdas {
         let mut system = *m;
         system[(0,0)] -= lambda;
@@ -56,15 +56,14 @@ pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f
         let v_t = svd.v_t.unwrap();
 
         for j in 0..3 {
-            // Om singulärvärdet är nära noll, har vi hittat en egenvektor
+            // If singular value is close to zero -> found an eigenvector
             if svd.singular_values[j].abs() < eps * 10.0 {
                 let v = v_t.row(j).transpose().normalize();
                 
-                // Undvik att lägga till v om vi redan har v eller -v i listan
-                // Inuti loopen för att rensa dubbletter:
+                // Remove doubles
 				if !result.iter().any(|(old_v, old_l): &(Vector3<f32>, f32)| {
 				    let same_lambda = (old_l - lambda).abs() < eps;
-				    // .abs() på dot-product fångar både v och -v (parallella vektorer)
+				    // .abs() on dot-product catches both v and -v
 				    let parallel = old_v.dot(&v).abs() > (1.0 - eps);
 				
 				    same_lambda && parallel
