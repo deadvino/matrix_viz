@@ -182,12 +182,13 @@ pub fn draw_eigen_rays(
 
     for (v, lambda) in rays {
         let dir = v.normalize() * 10.0;
-        let color = if lambda >= 0.0 {
-            egui::Color32::from_rgb(120, 160, 255) // blå
-        } else {
-            egui::Color32::from_rgb(220, 80, 80)   // röd
-        };
-
+        let color = if lambda.abs() <= 0.001 {
+		    egui::Color32::from_rgb(100, 150, 255) // Blue
+		} else if lambda > 0.001 {
+		    egui::Color32::from_rgb(120, 255, 160) // Green
+		} else {
+		    egui::Color32::from_rgb(220, 80, 80)   // Red
+		};
         let stroke = egui::Stroke::new(
             (lambda.abs() * 2.0).clamp(1.5, 4.0),
             color,
