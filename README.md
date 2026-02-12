@@ -80,8 +80,8 @@ https://visualstudio.microsoft.com/visual-cpp-build-tools/
 
 Clone the repository:
 
-    git clone https://github.com/deadvino/matrix-visualizer.git
-    cd matrix-visualizer
+    git clone https://github.com/deadvino/matrix_viz.git
+    cd matrix_viz
 
 Run the project:
 
