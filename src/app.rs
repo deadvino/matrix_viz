@@ -81,13 +81,11 @@ impl Default for MatrixApp {
             (egui::Color32::WHITE, "White (0)"),
         ];
 
-        for (i, (col, name)) in colors.iter().enumerate() {
+        for (_i, (col, name)) in colors.iter().enumerate() {
             vectors.push(UserVector {
-                pos: if i == 0 { Vector3::new(1.0, 1.0, 0.0) } 
-                     else if i == 1 { Vector3::new(-1.0, 1.0, 0.0) } 
-                     else { Vector3::new(0.0, 0.0, 0.0) },
+                pos: Vector3::new(0.0, 0.0, 0.0),
                 color: *col,
-                visible: i < 2, // Only the first 2 visible at startup
+                visible: false,
                 name: name.to_string(),
             });
         }
@@ -609,48 +607,54 @@ impl eframe::App for MatrixApp {
 			let input = ctx.input(|i| i.clone());
 					
 			let keys = [
-			    egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5,
-			    egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9, egui::Key::Num0,
+				egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5,
+				egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9, egui::Key::Num0,
 			];
 					
-			// --- EVENT-BASED START ---
+			// --- EVENT-BASED START / VISIBILITY TOGGLE ---
 			for event in &input.events {
-			    if let egui::Event::Key { key, pressed, modifiers, .. } = event {
-			        for (idx, expected) in keys.iter().enumerate() {
-			            if key == expected && *pressed && !wants_keyboard && modifiers.alt {
-			                // Start placement for this vector
-			                self.active_placement = Some(idx);
-			            }
-			        }
-			    }
+				if let egui::Event::Key { key, pressed, modifiers, .. } = event {
+					for (idx, expected) in keys.iter().enumerate() {
+						if key == expected && *pressed && !wants_keyboard {
+							if modifiers.alt {
+								// Alt pressed → start placement
+								self.active_placement = Some(idx);
+							} else {
+								// No Alt → toggle visibility
+								self.user_vectors[idx].visible = !self.user_vectors[idx].visible;
+							}
+						}
+					}
+				}
 			}
 			
 			// --- STOP PLACEMENT IF ALT IS RELEASED ---
 			if !input.modifiers.alt {
-			    self.active_placement = None;
+				self.active_placement = None;
 			}
 			
 			// --- GRID SNAP FLAG ---
-			// Snapping is default (true). Holding Ctrl disables snapping.
+			// Snapping is default (true). Ctrl disables snapping.
 			let snap_to_grid = input.modifiers.alt && !input.modifiers.ctrl;
 			
 			// --- PLACE VECTOR UNDER MOUSE ---
 			if let Some(idx) = self.active_placement {
-			    if resp.hovered() {
-			        if let Some(mouse_pos) = input.pointer.hover_pos() {
-			            self.place_vector_at_mouse(mouse_pos, rect, view_mat, idx);
+				if resp.hovered() {
+					if let Some(mouse_pos) = input.pointer.hover_pos() {
+						self.place_vector_at_mouse(mouse_pos, rect, view_mat, idx);
 					
-			            // Snap if needed
-			            if snap_to_grid {
-			                let v = &mut self.user_vectors[idx].pos;
-			                v.x = snap(v.x, 0.5);
-			                v.y = snap(v.y, 0.5);
-			            }
+						// Snap if needed
+						if snap_to_grid {
+							let v = &mut self.user_vectors[idx].pos;
+							v.x = snap(v.x, 0.5);
+							v.y = snap(v.y, 0.5);
+						}
 					
-			            ctx.request_repaint();
-			        }
-			    }
+						ctx.request_repaint();
+					}
+				}
 			}
+
             
             // Animation
             if self.animating {
