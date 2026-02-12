@@ -1,7 +1,6 @@
 use eframe::egui;
 use nalgebra::{Matrix3, Vector3};
-use rand::Rng; // This must be present to use .gen_range()
-
+use rand::Rng;
 
 use crate::math::is_near_identity;
 use crate::math::matrix_rank_approx;
@@ -17,7 +16,14 @@ use crate::render::draw_eigen_rays;
 use crate::render::draw_colored_unit_sphere;
 use crate::render::draw_flow_field;
 
-
+// --- NY HELPER STRUCT FÖR VEKTORER ---
+#[derive(Clone)]
+pub struct UserVector {
+    pub pos: Vector3<f32>,
+    pub color: egui::Color32,
+    pub visible: bool,
+    pub name: String,
+}
 
 pub struct MatrixApp {
     current: Matrix3<f32>,
@@ -25,72 +31,99 @@ pub struct MatrixApp {
     target: Matrix3<f32>,
     anim_t: f32,
     animating: bool,
-	anim_speed: f32,
+    anim_speed: f32,
     input: [[f32; 3]; 3],
     input_buffer: String,
-    selected_vector: Vector3<f32>,
+    
+    // --- NYTT: Lista med upp till 10 vektorer ---
+    user_vectors: Vec<UserVector>,
+	math_vec_a: usize, // Index för första vektorn i kalkylen
+    math_vec_b: usize, // Index för andra vektorn i kalkylen
+	active_placement: Option<usize>,
+    
     history: Vec<Matrix3<f32>>,
 
     // Viewport State
     view_rot: f32,      // Yaw
     view_pitch: f32,    // Pitch
     view_zoom: f32,     // Zoom level
-    click_to_place: bool,
 
-	// Draw toggles
-	draw_yellow: bool,
-	draw_purple: bool,
-	draw_cross_vector: bool,
-	draw_parallelogram: bool,
-	draw_determinant: bool,
+    // Draw toggles
+    draw_cross_vector: bool,
+    draw_parallelogram: bool,
+    draw_determinant: bool,
     draw_planes: bool,
 
-	// Eigen visualizations
-	draw_flow_field: bool,
-	draw_eigen_rays: bool,
-	draw_unit_sphere: bool,
-
+    // Eigen visualizations
+    draw_flow_field: bool,
+    draw_eigen_rays: bool,
+    draw_unit_sphere: bool,
 
     perspective: bool,
     grid_size: i32,
-	grid_opacity: u8, // 0 is invisible, 255 is fully opaque
-	selected_vector_purple: Vector3<f32>, // Den nya lila vektorn
-    cross_reverse_order: bool,           // För att byta ordning (Lila x Gul vs Gul x Lila)
+    grid_opacity: u8,
+    cross_reverse_order: bool, 
 }
 
 impl Default for MatrixApp {
     fn default() -> Self {
+        // Skapa 10 vektorer med olika färger
+        let mut vectors = Vec::new();
+        let colors = [
+            (egui::Color32::YELLOW, "Yellow (1)"),
+            (egui::Color32::from_rgb(160, 32, 240), "Purple (2)"),
+            (egui::Color32::from_rgb(0, 255, 255), "Cyan (3)"),
+            (egui::Color32::from_rgb(255, 100, 100), "Red (4)"),
+            (egui::Color32::from_rgb(100, 255, 100), "Green (5)"),
+            (egui::Color32::from_rgb(255, 165, 0), "Orange (6)"),
+            (egui::Color32::from_rgb(0, 100, 255), "Blue (7)"),
+            (egui::Color32::from_rgb(255, 105, 180), "Pink (8)"),
+            (egui::Color32::from_rgb(128, 255, 0), "Lime (9)"),
+            (egui::Color32::WHITE, "White (0)"),
+        ];
+
+        for (i, (col, name)) in colors.iter().enumerate() {
+            vectors.push(UserVector {
+                pos: if i == 0 { Vector3::new(1.0, 1.0, 0.0) } 
+                     else if i == 1 { Vector3::new(-1.0, 1.0, 0.0) } 
+                     else { Vector3::new(0.0, 0.0, 0.0) },
+                color: *col,
+                visible: i < 2, // Bara de två första synliga från start
+                name: name.to_string(),
+            });
+        }
+
         Self {
             current: Matrix3::identity(),
             start: Matrix3::identity(),
             target: Matrix3::identity(),
             anim_t: 0.0,
             animating: false,
-			anim_speed: 1.0,
+            anim_speed: 1.0,
             input: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             history: Vec::new(),
             view_rot: 0.5,
             view_pitch: 0.3,
             view_zoom: 1.0,
             input_buffer: String::new(),
-            click_to_place: true,
-			//draw defaults
+            
             draw_planes: true,
-			draw_yellow: false,
-			draw_purple: false,
-			draw_parallelogram: false,
-			draw_cross_vector: false,
-			draw_determinant: true,
+            draw_parallelogram: false,
+            draw_cross_vector: false,
+            draw_determinant: true,
 
-			draw_eigen_rays: false,
-			draw_flow_field: false,
-			draw_unit_sphere: false,
+            draw_eigen_rays: false,
+            draw_flow_field: false,
+            draw_unit_sphere: false,
 
             perspective: true,
             grid_size: 5,
-			grid_opacity: 30, // A nice subtle default
-			selected_vector: Vector3::new(1.0, 1.0, 0.0), // Gul
-            selected_vector_purple: Vector3::new(-1.0, 1.0, 0.0), // Lila standard
+            grid_opacity: 30,
+            
+            user_vectors: vectors,
+			active_placement: None,
+			math_vec_a: 0,
+			math_vec_b: 1,
             cross_reverse_order: false,
         }
     }
@@ -108,7 +141,6 @@ impl MatrixApp {
         self.animating = true;
     }
 
-
     fn handle_buffered_input(ui: &mut egui::Ui, id: egui::Id, buffer: &mut String, val: &mut f32) {
         let mut display_str = if ui.memory(|mem| mem.has_focus(id)) {
             buffer.clone()
@@ -116,7 +148,7 @@ impl MatrixApp {
             format!("{:.3}", val)
         };
 
-        let response = ui.add(egui::TextEdit::singleline(&mut display_str).id(id).desired_width(60.0));
+        let response = ui.add(egui::TextEdit::singleline(&mut display_str).id(id).desired_width(50.0));
 
         if response.gained_focus() {
             *buffer = format!("{:.3}", val);
@@ -138,8 +170,7 @@ impl MatrixApp {
         }
     }
 
-
-	fn swap_columns(&mut self, c1: usize, c2: usize) {
+    fn swap_columns(&mut self, c1: usize, c2: usize) {
         for r in 0..3 {
             let temp = self.input[r][c1];
             self.input[r][c1] = self.input[r][c2];
@@ -148,14 +179,12 @@ impl MatrixApp {
         self.recalculate_target();
     }
 
-
-	fn swap_rows(&mut self, r1: usize, r2: usize) {
+    fn swap_rows(&mut self, r1: usize, r2: usize) {
         self.input.swap(r1, r2);
         self.recalculate_target();
     }
 
-
-	fn transpose_input(&mut self) {
+    fn transpose_input(&mut self) {
         for r in 0..3 {
             for c in (r + 1)..3 {
                 let temp = self.input[r][c];
@@ -166,57 +195,52 @@ impl MatrixApp {
         self.recalculate_target();
     }
 
-
-	pub fn set_view(&mut self, yaw: f32, pitch: f32) {
+    pub fn set_view(&mut self, yaw: f32, pitch: f32) {
         self.view_rot = yaw;
         self.view_pitch = pitch;
     }
 
-
-	fn handle_hotkeys(&mut self, ctx: &egui::Context) {
+    fn handle_hotkeys(&mut self, ctx: &egui::Context) {
+        // Ignorera hotkeys om vi skriver i en textruta
         if ctx.wants_keyboard_input() { return; }
+        
         let input = ctx.input(|i| i.clone());
 
         if input.key_pressed(egui::Key::P) { self.draw_planes = !self.draw_planes; }
         if input.key_pressed(egui::Key::V) { self.perspective = !self.perspective; }
-		if input.key_pressed(egui::Key::D) { self.draw_determinant = !self.draw_determinant; }
-		if input.key_pressed(egui::Key::E) { self.draw_eigen_rays = !self.draw_eigen_rays; }
-		if input.key_pressed(egui::Key::U) { self.draw_unit_sphere = !self.draw_unit_sphere; }
+        if input.key_pressed(egui::Key::D) { self.draw_determinant = !self.draw_determinant; }
+        if input.key_pressed(egui::Key::E) { self.draw_eigen_rays = !self.draw_eigen_rays; }
+        if input.key_pressed(egui::Key::U) { self.draw_unit_sphere = !self.draw_unit_sphere; }
         if input.key_pressed(egui::Key::C) { self.history.clear(); self.recalculate_target(); }
         
         if input.key_pressed(egui::Key::A) && !self.animating {
-		    let m = Matrix3::new(
-		        self.input[0][0], self.input[0][1], self.input[0][2],
-		        self.input[1][0], self.input[1][1], self.input[1][2],
-		        self.input[2][0], self.input[2][1], self.input[2][2],
-		    );
-		    self.history.push(m);
-		    self.recalculate_target();
-		}
+            let m = Matrix3::new(
+                self.input[0][0], self.input[0][1], self.input[0][2],
+                self.input[1][0], self.input[1][1], self.input[1][2],
+                self.input[2][0], self.input[2][1], self.input[2][2],
+            );
+            self.history.push(m);
+            self.recalculate_target();
+        }
 
-		if input.key_pressed(egui::Key::O) && !self.animating {
-			self.generate_random_orthogonal_matrix();
-		}
+        if input.key_pressed(egui::Key::O) && !self.animating {
+            self.generate_random_orthogonal_matrix();
+        }
 
-		if input.key_pressed(egui::Key::R) && !self.animating {
-			if input.modifiers.shift {
-		        self.generate_random_matrix(1.0, 1.0); // t.ex. -1..1
-		    } else {
-		        self.generate_random_matrix(3.0, 0.5);
-		    }
-		}
-
-		if input.key_pressed(egui::Key::Space) {
-			self.click_to_place = true;
-		}
+        if input.key_pressed(egui::Key::R) && !self.animating {
+            if input.modifiers.shift {
+                self.generate_random_matrix(1.0, 1.0); 
+            } else {
+                self.generate_random_matrix(3.0, 0.5);
+            }
+        }
         
         if input.modifiers.command && input.key_pressed(egui::Key::Z) {
             if !self.history.is_empty() { self.history.pop(); self.recalculate_target(); }
         }
     }
 
-
-	fn get_view_matrix(&self) -> Matrix3<f32> {
+    fn get_view_matrix(&self) -> Matrix3<f32> {
         let (cr, sr) = (self.view_rot.cos(), self.view_rot.sin());
         let (cp, sp) = (self.view_pitch.cos(), self.view_pitch.sin());
         Matrix3::new(
@@ -226,23 +250,20 @@ impl MatrixApp {
         )
     }
 
-
-	fn draw_matrix_input_ui(&mut self, ui: &mut egui::Ui) {
+    fn draw_matrix_input_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Transform Matrix");
         ui.add_space(8.0);
 
-		// --- NEW RANDOM BUTTON ---
         if ui.button("🎲 Generate Random [R]").clicked()  {
             self.generate_random_matrix(3.0, 0.5);
         }
         ui.add_space(8.0);
-		if ui.button("🎲 Generate Random Orthogonal [O]").clicked()  {
+        if ui.button("🎲 Generate Random Orthogonal [O]").clicked()  {
             self.generate_random_orthogonal_matrix();
         }
         ui.add_space(8.0);
 
         egui::Grid::new("matrix_input_grid").spacing([8.0, 8.0]).show(ui, |ui| {
-            // Kolumn-bytar-knappar (Överst)
             ui.label(""); 
             if ui.button("⟷").on_hover_text("Byt kolumn 1 & 2").clicked() { self.swap_columns(0, 1); }
             if ui.button("⟷").on_hover_text("Byt kolumn 2 & 3").clicked() { self.swap_columns(1, 2); }
@@ -253,7 +274,6 @@ impl MatrixApp {
                     let id = ui.make_persistent_id(format!("mat_input_{}_{}", r, c));
                     Self::handle_buffered_input(ui, id, &mut self.input_buffer, &mut self.input[r][c]);
                 }
-                // Rad-bytar-knappar (Till höger)
                 if r < 2 {
                     if ui.button("↕").on_hover_text(format!("Byt rad {} & {}", r+1, r+2)).clicked() {
                         self.swap_rows(r, r+1);
@@ -274,48 +294,44 @@ impl MatrixApp {
         });
     }
 
+    fn draw_matrix(ui: &mut egui::Ui, m: &Matrix3<f32>) {
+        for r in 0..3 {
+            ui.horizontal(|ui| {
+                for c in 0..3 {
+                    let val = m[(r, c)];
+                    let color = if val.abs() < 0.001 {
+                        egui::Color32::DARK_GRAY
+                    } else if val > 0.0 {
+                        egui::Color32::LIGHT_GREEN
+                    } else {
+                        egui::Color32::LIGHT_RED
+                    };
+                    ui.colored_label(color, format!("{:>6.2}", val));
+                }
+            });
+        }
+    }
 
-	fn draw_matrix(ui: &mut egui::Ui, m: &Matrix3<f32>) {
-		for r in 0..3 {
-			ui.horizontal(|ui| {
-				for c in 0..3 {
-					let val = m[(r, c)];
-					let color = if val.abs() < 0.001 {
-						egui::Color32::DARK_GRAY
-					} else if val > 0.0 {
-						egui::Color32::LIGHT_GREEN
-					} else {
-						egui::Color32::LIGHT_RED
-					};
-					ui.colored_label(color, format!("{:>6.2}", val));
-				}
-			});
-		}
-	}
+    // --- UPPDATERAD: Tar nu emot index istället för target_is_purple ---
+    fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>, vec_idx: usize) {
+        if vec_idx >= self.user_vectors.len() { return; }
+        
+        let center = rect.center();
+        let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
+        let inv_view = view_mat.transpose();
+        let dx = (mouse_pos.x - center.x) / base_scale;
+        let dy = (center.y - mouse_pos.y) / base_scale;
+        let world_dir = inv_view * Vector3::new(dx, dy, 0.0);
+    
+        self.user_vectors[vec_idx].pos = Vector3::new(world_dir.x, world_dir.y, 0.0);
+        self.user_vectors[vec_idx].visible = true; // Gör den synlig om man placerar den
+    }
 
-
-	fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>, target_is_purple: bool) {
-	    let center = rect.center();
-	    let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
-	    let inv_view = view_mat.transpose();
-	    let dx = (mouse_pos.x - center.x) / base_scale;
-	    let dy = (center.y - mouse_pos.y) / base_scale;
-	    let world_dir = inv_view * Vector3::new(dx, dy, 0.0);
-	
-	    let target = if target_is_purple { &mut self.selected_vector_purple } else { &mut self.selected_vector };
-	    *target = Vector3::new(world_dir.x, world_dir.y, 0.0);
-	}
-
-
-	fn generate_random_matrix(&mut self, range: f32, step: f32) {
+    fn generate_random_matrix(&mut self, range: f32, step: f32) {
         let mut rng = rand::thread_rng();
-
-		let max = (range / step) as i32;
-
+        let max = (range / step) as i32;
         for r in 0..3 {
             for c in 0..3 {
-                // Generates values between -6 and 6, then multiplies by 0.5 
-                // to get steps of 0.5 between -3 and 3
                 let rand_val = rng.gen_range(-max..=max);
                 self.input[r][c] = rand_val as f32 * step;
             }
@@ -323,310 +339,231 @@ impl MatrixApp {
         self.recalculate_target();
     }
 
+    fn generate_random_orthogonal_matrix(&mut self) {
+        let mut rng = rand::thread_rng();
+        let u1: f32 = rng.r#gen();
+        let u2: f32 = rng.r#gen();
+        let u3: f32 = rng.r#gen();
 
-	fn generate_random_orthogonal_matrix(&mut self) {
-	    let mut rng = rand::thread_rng();
+        let sqrt1_minus_u1 = (1.0 - u1).sqrt();
+        let sqrt_u1 = u1.sqrt();
 
-	    // --- Generate uniform random quaternion (rotation) ---
-	    let u1: f32 = rng.r#gen();
-	    let u2: f32 = rng.r#gen();
-	    let u3: f32 = rng.r#gen();
+        let theta1 = 2.0 * std::f32::consts::PI * u2;
+        let theta2 = 2.0 * std::f32::consts::PI * u3;
 
-	    let sqrt1_minus_u1 = (1.0 - u1).sqrt();
-	    let sqrt_u1 = u1.sqrt();
+        let w = sqrt1_minus_u1 * theta1.sin();
+        let x = sqrt1_minus_u1 * theta1.cos();
+        let y = sqrt_u1 * theta2.sin();
+        let z = sqrt_u1 * theta2.cos();
 
-	    let theta1 = 2.0 * std::f32::consts::PI * u2;
-	    let theta2 = 2.0 * std::f32::consts::PI * u3;
+        let mut m = [
+            [
+                1.0 - 2.0 * (y * y + z * z),
+                2.0 * (x * y - z * w),
+                2.0 * (x * z + y * w),
+            ],
+            [
+                2.0 * (x * y + z * w),
+                1.0 - 2.0 * (x * x + z * z),
+                2.0 * (y * z - x * w),
+            ],
+            [
+                2.0 * (x * z - y * w),
+                2.0 * (y * z + x * w),
+                1.0 - 2.0 * (x * x + y * y),
+            ],
+        ];
 
-	    let w = sqrt1_minus_u1 * theta1.sin();
-	    let x = sqrt1_minus_u1 * theta1.cos();
-	    let y = sqrt_u1 * theta2.sin();
-	    let z = sqrt_u1 * theta2.cos();
+        if rng.gen_bool(0.5) {
+            for i in 0..3 { m[i][0] = -m[i][0]; }
+        }
+        self.input = m;
+        self.recalculate_target();
+    }
 
-	    // --- Convert quaternion to rotation matrix (det = +1) ---
-	    let mut m = [
-	        [
-	            1.0 - 2.0 * (y * y + z * z),
-	            2.0 * (x * y - z * w),
-	            2.0 * (x * z + y * w),
-	        ],
-	        [
-	            2.0 * (x * y + z * w),
-	            1.0 - 2.0 * (x * x + z * z),
-	            2.0 * (y * z - x * w),
-	        ],
-	        [
-	            2.0 * (x * z - y * w),
-	            2.0 * (y * z + x * w),
-	            1.0 - 2.0 * (x * x + y * y),
-	        ],
-	    ];
+    fn resulting_matrix(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Resulting Matrix");
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label("M");
+                    Self::draw_matrix(ui, &self.target);
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("M");
+                        ui.label(egui::RichText::new("-1").small().raised());
+                    });
+                    if let Some(inv) = self.target.try_inverse() {
+                        Self::draw_matrix(ui, &inv);
+                    } else {
+                        ui.colored_label(egui::Color32::LIGHT_RED, "Not invertible");
+                    }
+                });
+            });
+        });
+    }
 
-	    // --- With 50% probability, flip determinant to -1 ---
-	    if rng.gen_bool(0.5) {
-	        // Negate one column (e.g., first column)
-	        for i in 0..3 {
-	            m[i][0] = -m[i][0];
-	        }
-	    }
-
-	    self.input = m;
-	    self.recalculate_target();
-	}
-
-
-
-
-	fn resulting_matrix(&mut self, ui: &mut egui::Ui) {
-		ui.heading("Resulting Matrix");
-				
-					egui::Frame::group(ui.style()).show(ui, |ui| {
-					    ui.horizontal(|ui| {
-						
-					        // --- M_total ---
-					        ui.vertical(|ui| {
-					            ui.label("M");
-					            Self::draw_matrix(ui, &self.target);
-					        });
-						
-					        ui.separator();
-						
-					        // --- Invers ---
-					        ui.vertical(|ui| {
-					            ui.horizontal(|ui| {
-								    ui.label("M");
-								    ui.label(
-								        egui::RichText::new("-1")
-								            .small()
-								            .raised()
-								    );
-								});
-							
-					            if let Some(inv) = self.target.try_inverse() {
-					                Self::draw_matrix(ui, &inv);
-					            } else {
-					                ui.colored_label(
-					                    egui::Color32::LIGHT_RED,
-					                    "Not invertible"
-					                );
-					            }
-					        });
-					    });
-					});
-	}
-
-
-	fn draw_vector_ui(
-	    ui: &mut egui::Ui,
-	    name: &str,
-	    color: egui::Color32,
-	    vector: &mut nalgebra::Vector3<f32>, // Eller den typ du använder
-	    transformation_matrix: &nalgebra::Matrix3<f32>,
-	    input_buffer: &mut String,
-	    id_prefix: &str,
-	) {
-	    ui.add_space(10.0);
-	    ui.separator();
-	
-	    // Header: "Yellow Vector" / "Purple Vector"
-	    ui.horizontal(|ui| {
-	        ui.label(egui::RichText::new(name).color(color).strong().size(18.0));
-	        ui.label(egui::RichText::new(" Vector").strong().size(18.0));
-	    });
-
-	    // Input fält för X, Y, Z
-	    ui.horizontal(|ui| {
-	        for i in 0..3 {
-	            let label = ["X", "Y", "Z"][i];
-	            ui.label(format!("{}:", label));
-	            let id = ui.make_persistent_id(format!("{}_{}", id_prefix, i));
-	            Self::handle_buffered_input(ui, id, input_buffer, &mut vector[i]);
-	        }
-	    });
-	    ui.label("[SHIFT + SPACE] to place vector on XY plane");
-
-	    // Transformation
-	    let transformed = *transformation_matrix * *vector;
-
-	    ui.add_space(6.0);
-	    egui::Frame::group(ui.style()).show(ui, |ui| {
-	        ui.label(egui::RichText::new("Transformed (M·v)").color(color).strong());
-
-	        ui.horizontal(|ui| {
-	            for i in 0..3 {
-	                let val = transformed[i];
-	                let val_color = if val.abs() < 0.001 {
-	                    egui::Color32::DARK_GRAY
-	                } else if val > 0.0 {
-	                    egui::Color32::LIGHT_GREEN
-	                } else {
-	                    egui::Color32::LIGHT_RED
-	                };
-	                ui.colored_label(val_color, format!("{:>6.3}", val));
-	            }
-	        });
-	    });
-	}
-
-
-	fn draw_sidebar(&mut self, ctx: &egui::Context) {
-		egui::SidePanel::left("controls")
-			.width_range(300.0..=350.0)
-			.show(ctx, |ui| {
-				egui::ScrollArea::vertical()
-            	.auto_shrink([false; 2])
-            	.show(ui, |ui| {
-            		ui.heading("Matrix Visualizer");
-            		ui.add_space(4.0);
-
-            		ui.collapsing("⌨ Hotkeys", |ui| {
-            		    ui.label("P: Planes | V: Persp | A: Apply\nCtrl+Z: Undo | C: Clear");
-            		});
-				
-            		ui.separator();
-            		ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
-				
-					ui.separator();
-					ui.heading("Feature Toggles");
-					ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
-					ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
-					ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays [E]");
-					ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
-					ui.checkbox(&mut self.draw_unit_sphere, "⚪ Unit Sphere Deformation [U]");
-
-					
-					ui.checkbox(&mut self.draw_yellow, egui::RichText::new("Yellow Vector").color(egui::Color32::YELLOW).strong());
-					ui.checkbox(&mut self.draw_purple, egui::RichText::new("Purple Vector").color(egui::Color32::from_rgb(160, 32, 240)).strong());
-					if self.draw_yellow && self.draw_purple {
-						ui.checkbox(&mut self.draw_cross_vector, "X Cross product vector");
-						ui.checkbox(&mut self.draw_parallelogram, "▱ Parallellogram");
-					}
-					if !(self.draw_yellow && self.draw_purple) {
-						self.draw_cross_vector = false;
-						self.draw_parallelogram = false;
-					}
-				
-					ui.add_space(6.0);
-            		ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
-					ui.add(egui::Slider::new(&mut self.grid_size, 1..=20).text("Grid Size"));
-					ui.add(
-					    egui::Slider::new(&mut self.anim_speed, 0.1..=3.0)
-					        .text("Animation Speed")
-					);
-				
-            		ui.add_space(10.0);
-            		self.draw_matrix_input_ui(ui); // Bryt ut matris-gridden hit
-				
-            		ui.separator();
-            		self.resulting_matrix(ui);
-				
-					ui.add_space(4.0);
-					let det = self.target.determinant();
-					let rank = matrix_rank_approx(&self.target, 1e-6);
-
-					ui.label(format!("det(M) = {:.4}", det));
-					ui.label(format!("rank(M) = {}", rank));
-					if real_eigenpairs_exact(&self.current, 1e-3).is_empty() {
-					    ui.colored_label(
-					        egui::Color32::GRAY,
-					        "No real eigenvectors (complex eigenvalues)"
-					    );
-					}
-
-
-					if self.draw_yellow {
-					    Self::draw_vector_ui(
-					        ui,
-					        "Yellow",
-					        egui::Color32::YELLOW,
-					        &mut self.selected_vector,
-					        &self.current,
-					        &mut self.input_buffer,
-					        "yellow_vec"
-					    );
-					}
-					
-					if self.draw_purple {
-					    Self::draw_vector_ui(
-					        ui,
-					        "Purple",
-					        egui::Color32::from_rgb(160, 32, 240),
-					        &mut self.selected_vector_purple,
-					        &self.current,
-					        &mut self.input_buffer,
-					        "purple_vec"
-					    );
-					}
-					
-
-					if self.draw_yellow && self.draw_purple {
-					
-						ui.add_space(10.0);
-						ui.separator();
-						ui.heading("Vector Properties");
-						let btn_text = if self.cross_reverse_order { "Lila × Gul" } else { "Gul × Lila" };
-						if ui.button(format!("Byt ordning: {}", btn_text)).clicked() {
-							self.cross_reverse_order = !self.cross_reverse_order;
-						}
-						// --- Cross product coordinates ---
-						let m = self.current;
-						let yellow_t = m * self.selected_vector;
-						let purple_t = m * self.selected_vector_purple;
-					
-						let cross = if self.cross_reverse_order {
-							purple_t.cross(&yellow_t)
-						} else {
-							yellow_t.cross(&purple_t)
-						};
-					
-						ui.add_space(6.0);
-						egui::Frame::group(ui.style()).show(ui, |ui| {
-							ui.horizontal(|ui| {
-							
-								// --- Crossproduct (column 1) ---
-								ui.vertical(|ui| {
-									ui.label("Cross product:");
-								
-									for i in 0..3 {
-										let val = cross[i];
-										let color = if val.abs() < 0.001 {
-											egui::Color32::DARK_GRAY
-										} else if val > 0.0 {
-											egui::Color32::LIGHT_GREEN
-										} else {
-											egui::Color32::LIGHT_RED
-										};
-									
-										ui.colored_label(color, format!("{:>6.2}", val));
-									}
-								});
-							
-								ui.separator();
-							
-								// --- Dot-product (column 2) ---
-								ui.vertical(|ui| {
-									ui.label("Dot product:");
-								
-									let dot = yellow_t.dot(&purple_t);
-								
-									let color = if dot.abs() < 0.001 {
-										egui::Color32::DARK_GRAY
-									} else if dot > 0.0 {
-										egui::Color32::LIGHT_GREEN
-									} else {
-										egui::Color32::LIGHT_RED
-									};
-								
-									ui.colored_label(color, format!("{:.3}", dot));
-								});
-							});
-						});
-					}
-				});
-
+    // --- Generisk funktion för att rita UI för en vektor ---
+    fn draw_vector_ui_item(
+        ui: &mut egui::Ui,
+        idx: usize,
+        user_vector: &mut UserVector,
+        transformation_matrix: &nalgebra::Matrix3<f32>,
+        input_buffer: &mut String,
+    ) {
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut user_vector.visible, "");
+            ui.colored_label(user_vector.color, egui::RichText::new(&user_vector.name).strong());
         });
 
-	}
+        if user_vector.visible {
+            ui.indent("vec_indent", |ui| {
+                // Input fält
+                ui.horizontal(|ui| {
+                    for i in 0..3 {
+                        let label = ["X", "Y", "Z"][i];
+                        ui.label(format!("{}:", label));
+                        let id = ui.make_persistent_id(format!("vec_input_{}_{}", idx, i));
+                        Self::handle_buffered_input(ui, id, input_buffer, &mut user_vector.pos[i]);
+                    }
+                });
+
+                // Transformation
+                let transformed = *transformation_matrix * user_vector.pos;
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("➞").strong());
+                    for i in 0..3 {
+                        let val = transformed[i];
+                        let val_color = if val.abs() < 0.001 { egui::Color32::DARK_GRAY } 
+                                        else if val > 0.0 { egui::Color32::LIGHT_GREEN } 
+                                        else { egui::Color32::LIGHT_RED };
+                        ui.colored_label(val_color, format!("{:>5.2}", val));
+                    }
+                });
+            });
+            ui.add_space(4.0);
+        }
+    }
+
+
+    fn draw_sidebar(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("controls")
+            .width_range(300.0..=350.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    ui.heading("Matrix Visualizer");
+                    ui.add_space(4.0);
+
+                    ui.collapsing("⌨ Hotkeys", |ui| {
+                        ui.label("1-0: Place Vectors");
+                        ui.label("P: Planes | V: Persp | A: Apply");
+                        ui.label("Ctrl+Z: Undo | C: Clear");
+                    });
+                
+                    ui.separator();
+                    ui.checkbox(&mut self.perspective, "🔭 Perspective [V]");
+                
+                    ui.separator();
+                    ui.heading("Feature Toggles");
+                    ui.checkbox(&mut self.draw_planes, "🔳 Show Original [P]");
+                    ui.checkbox(&mut self.draw_determinant, "🧊 Determinant [D]");
+                    ui.checkbox(&mut self.draw_eigen_rays, "✨ Eigen Rays [E]");
+                    ui.checkbox(&mut self.draw_flow_field, "🌊 Flow Field");
+                    ui.checkbox(&mut self.draw_unit_sphere, "⚪ Unit Sphere Deformation [U]");
+
+                    ui.add_space(6.0);
+                    ui.add(egui::Slider::new(&mut self.grid_opacity, 0..=255).text("Grid Alpha"));
+                    ui.add(egui::Slider::new(&mut self.grid_size, 1..=20).text("Grid Size"));
+                    ui.add(egui::Slider::new(&mut self.anim_speed, 0.1..=3.0).text("Animation Speed"));
+                
+                    ui.add_space(10.0);
+                    self.draw_matrix_input_ui(ui); 
+                
+                    ui.separator();
+                    self.resulting_matrix(ui);
+                
+                    ui.add_space(4.0);
+                    let det = self.target.determinant();
+                    let rank = matrix_rank_approx(&self.target, 1e-6);
+
+                    ui.label(format!("det(M) = {:.4}", det));
+                    ui.label(format!("rank(M) = {}", rank));
+                    if real_eigenpairs_exact(&self.current, 1e-3).is_empty() {
+                        ui.colored_label(egui::Color32::GRAY, "No real eigenvectors");
+                    }
+
+                    // --- VECTOR LIST UI ---
+                    ui.add_space(10.0);
+                    // Inuti draw_sidebar()
+					ui.separator();
+					ui.heading("Vectors (Keys 1-9, 0)");
+
+					// Loopar igenom alla vektorer
+					for i in 0..self.user_vectors.len() {
+					    let vec = &mut self.user_vectors[i];
+
+					    if vec.visible {
+					        Self::draw_vector_ui_item(
+					            ui,
+					            i,
+					            vec,
+					            &self.current,
+					            &mut self.input_buffer,
+					        );
+					    }
+					}
+
+
+					// --- NY SEKTION: SELECTOR FÖR BERÄKNINGAR ---
+					ui.add_space(10.0);
+					ui.separator();
+					ui.heading("Vector Interaction Math");
+
+					ui.horizontal(|ui| {
+					    ui.label("Vector A:");
+					    egui::ComboBox::from_id_source("math_a")
+					        .selected_text(&self.user_vectors[self.math_vec_a].name)
+					        .show_ui(ui, |ui| {
+					            for i in 0..10 {
+					                ui.selectable_value(&mut self.math_vec_a, i, &self.user_vectors[i].name);
+					            }
+					        });
+					});
+
+					ui.horizontal(|ui| {
+					    ui.label("Vector B:");
+					    egui::ComboBox::from_id_source("math_b")
+					        .selected_text(&self.user_vectors[self.math_vec_b].name)
+					        .show_ui(ui, |ui| {
+					            for i in 0..10 {
+					                ui.selectable_value(&mut self.math_vec_b, i, &self.user_vectors[i].name);
+					            }
+					        });
+					});
+
+					// Beräkna baserat på valda index
+					let v_a_raw = self.user_vectors[self.math_vec_a].pos;
+					let v_b_raw = self.user_vectors[self.math_vec_b].pos;
+					let v1 = self.current * v_a_raw;
+					let v2 = self.current * v_b_raw;
+
+					let cross = if self.cross_reverse_order { v2.cross(&v1) } else { v1.cross(&v2) };
+					let dot = v1.dot(&v2);
+
+					ui.checkbox(&mut self.draw_cross_vector, "Show Cross Product (White)");
+					ui.checkbox(&mut self.draw_parallelogram, "Show Parallelogram");
+
+					egui::Frame::group(ui.style()).show(ui, |ui| {
+					    ui.label(format!("Dot Product: {:.3}", dot));
+					    ui.label(format!("Cross Product Len: {:.3}", cross.norm()));
+					});
+                });
+        });
+    }
 }
 
 fn smoothstep(t: f32) -> f32 { t * t * (3.0 - 2.0 * t) }
@@ -637,162 +574,173 @@ impl eframe::App for MatrixApp {
         self.handle_hotkeys(ctx);
         let dt = ctx.input(|i| i.unstable_dt).max(1e-6);
 
-		let x_col = egui::Color32::from_hex("#83B366").unwrap();
-		let y_col = egui::Color32::from_hex("#FF7154").unwrap();
-		let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
+        let x_col = egui::Color32::from_hex("#83B366").unwrap();
+        let y_col = egui::Color32::from_hex("#FF7154").unwrap();
+        let z_col = egui::Color32::from_hex("#8BC9D7").unwrap();
 
         // --- SIDEBAR ---
         self.draw_sidebar(ctx);
 
         // --- VIEWPORT ---
         egui::CentralPanel::default().show(ctx, |ui| {
-            let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
-			
             
-            // Input handling
+            let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
+            
+            // Input handling View Rotation
             if resp.dragged_by(egui::PointerButton::Primary) {
                 self.view_rot += resp.drag_delta().x * 0.01;
                 self.view_pitch = (self.view_pitch - resp.drag_delta().y * -0.01).clamp(-1.5, 1.5);
             }
             self.view_zoom = (self.view_zoom * (1.0 + ui.input(|i| i.smooth_scroll_delta.y) * 0.001)).clamp(0.1, 10.0);
 
-            // 1. Lyft ut variabler som closuren behöver för att undvika att låsa hela 'self'
-			let perspective_mode = self.perspective; 
-			let view_zoom = self.view_zoom;
+            // Setup Projection
+            let painter = ui.painter_at(rect);
+            let view_mat = self.get_view_matrix();
+            let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
+            let perspective_mode = self.perspective; 
 
-			// Setup Projection
-			let painter = ui.painter_at(rect);
-			let view_mat = self.get_view_matrix();
-			let base_scale = (rect.width().min(rect.height()) / 25.0) * view_zoom;
+            let project = |v: Vector3<f32>| {
+                let v_v = view_mat * v;
+                let factor = if perspective_mode { 
+                    (base_scale * 20.0) / (20.0 - v_v.z).max(0.1) 
+                } else { 
+                    base_scale 
+                };
+                rect.center() + egui::vec2(v_v.x * factor, -v_v.y * factor)
+            };
 
-			// Nu lånar closuren bara 'perspective_mode' och 'base_scale', inte 'self'
-			let project = |v: Vector3<f32>| {
-			    let v_v = view_mat * v;
-			    let factor = if perspective_mode { 
-			        (base_scale * 20.0) / (20.0 - v_v.z).max(0.1) 
-			    } else { 
-			        base_scale 
-			    };
-			    rect.center() + egui::vec2(v_v.x * factor, -v_v.y * factor)
-			};
+            // --- INPUT LOGIK FÖR ATT PLACERA VEKTORER (1-9, 0) ---
+            let wants_keyboard = ctx.wants_keyboard_input();
+			let input = ctx.input(|i| i.clone());
+					
+			let keys = [
+				egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5,
+				egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9, egui::Key::Num0
+			];
+					
+			// --- 1️⃣ EVENT-BASERAD START/STOP ---
+			for event in &input.events {
+				if let egui::Event::Key {
+					key,
+					pressed,
+					modifiers,
+					..
+				} = event
+				{
+					for (idx, expected) in keys.iter().enumerate() {
+						if key == expected {
+						
+							// KEY PRESSED
+							if *pressed {
+								if !wants_keyboard && modifiers.alt {
+									self.active_placement = Some(idx);
+								}
+								else if !wants_keyboard {
+									// Toggle endast om vi INTE startar placement
+									self.user_vectors[idx].visible =
+										!self.user_vectors[idx].visible;
+								}
+							}
+						
+							// KEY RELEASED
+							if !pressed {
+								if self.active_placement == Some(idx) {
+									self.active_placement = None;
+								}
+							}
+						}
+					}
+				}
+			}
 
-			let is_space = ctx.input(|i| i.key_down(egui::Key::Space));
-			let is_shift = ctx.input(|i| i.modifiers.shift);
-
-			if is_space {
-			    if let Some(pos) = ctx.pointer_interact_pos() {
-			        if rect.contains(pos) {
-			            // Om shift är nere -> Lila, annars -> Gul
-			            self.place_vector_at_mouse(pos, rect, view_mat, is_shift);
+			if let Some(idx) = self.active_placement {
+			    if resp.hovered() {
+			        if let Some(pos) = input.pointer.hover_pos() {
+			            self.place_vector_at_mouse(pos, rect, view_mat, idx);
+			            ctx.request_repaint();
 			        }
 			    }
 			}
 
-			
+
+            
             // Animation
             if self.animating {
                 let base_duration = 0.8;
-				self.anim_t += dt * self.anim_speed / base_duration;
+                self.anim_t += dt * self.anim_speed / base_duration;
                 let t = smoothstep(self.anim_t.min(1.0));
                 self.current = self.start * (1.0 - t) + self.target * t;
                 if self.anim_t >= 1.0 { self.current = self.target; self.animating = false; }
             }
 
             // Render Scene
-
-			if self.draw_flow_field {
-			    draw_flow_field(
-			        &painter,
-			        &project,
-			        &self.current,
-			        0.8, // spacing
-			        6,   // extent
-			    );
-			}
+            if self.draw_flow_field {
+                draw_flow_field(&painter, &project, &self.current, 0.8, 6);
+            }
 
             if self.draw_planes && !self.current.is_identity(1e-10)  { draw_origin_planes(&painter, &project, self.grid_size); }
             
             let grid_c = egui::Color32::from_rgba_unmultiplied(80, 140, 220, self.grid_opacity);
             draw_grid_3d(&painter, &project, &self.current, grid_c, self.grid_size);
             
-			if self.draw_determinant {
-			    draw_determinant_geometry(
-			        &painter,
-			        &project,
-			        &self.current, 
-			    );
-			}
+            if self.draw_determinant {
+                draw_determinant_geometry(&painter, &project, &self.current);
+            }
 
-			if self.draw_unit_sphere
-			    && matrix_rank_approx(&self.current, 1e-6) >= 2
-			{
-			    //draw_deformed_sphere(&painter, &project, &self.current);
-			    draw_colored_unit_sphere(&painter, &project, &self.current);
-				
-			}
+            if self.draw_unit_sphere && matrix_rank_approx(&self.current, 1e-6) >= 2 {
+                draw_colored_unit_sphere(&painter, &project, &self.current);
+            }
 
-			if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
-			    draw_eigen_rays(&painter, &project, &self.current);
-			}
-
-
-
+            if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
+                draw_eigen_rays(&painter, &project, &self.current);
+            }
             
             draw_axes_3d(&painter, &project);
             
-            // Render Basis Vectors
+            // Render Basis Vectors (XYZ)
             let m = self.current;
-            let vectors = [
-				(m*Vector3::x(), x_col),
-				(m*Vector3::y(), y_col), 
-				(m*Vector3::z(), z_col),
-			];
+            let basis_vectors = [
+                (m*Vector3::x(), x_col),
+                (m*Vector3::y(), y_col), 
+                (m*Vector3::z(), z_col),
+            ];
             
-            for (v, color) in vectors {
+            for (v, color) in basis_vectors {
                 draw_arrow(&painter, project(Vector3::zeros()), project(v), color);
             }
 
-			// Render Basis Vectors & Custom Vectors
-			let m = self.current;
-			let yellow_transformed = m * self.selected_vector;
-			let purple_transformed = m * self.selected_vector_purple;
-				
-			// Beräkna kryssprodukt baserat på ordning
-			let cross_prod = if self.cross_reverse_order {
-				purple_transformed.cross(&yellow_transformed)
-			} else {
-				yellow_transformed.cross(&purple_transformed)
-			};
+            if self.draw_parallelogram {
+                let v1 = self.current * self.user_vectors[self.math_vec_a].pos;
+                let v2 = self.current * self.user_vectors[self.math_vec_b].pos;
+                let poly = vec![
+                    project(Vector3::zeros()),
+                    project(v1),
+                    project(v1 + v2),
+                    project(v2),
+                ];
+                painter.add(egui::Shape::convex_polygon(
+                    poly,
+                    egui::Color32::from_rgba_unmultiplied(200, 200, 200, 30),
+                    egui::Stroke::new(1.0, egui::Color32::LIGHT_GRAY),
+                ));
+            }
+            
+            if self.draw_cross_vector {
+                let v1 = self.current * self.user_vectors[self.math_vec_a].pos;
+                let v2 = self.current * self.user_vectors[self.math_vec_b].pos;
+                let cross = if self.cross_reverse_order { v2.cross(&v1) } else { v1.cross(&v2) };
+                if cross.norm() > 0.001 {
+                    draw_arrow(&painter, project(Vector3::zeros()), project(cross), egui::Color32::WHITE);
+                }
+            }
 
-			// --- Parallelogram between yellow & purple ---
-			let m = self.current;
-			let y = m * self.selected_vector;
-			let p = m * self.selected_vector_purple;
-			
-			if self.draw_parallelogram {
-				let poly = vec![
-				    project(Vector3::zeros()),
-				    project(y),
-				    project(y + p),
-				    project(p),
-				];
-				
-				painter.add(egui::Shape::convex_polygon(
-				    poly,
-				    egui::Color32::from_rgba_unmultiplied(180, 180, 180, 40),
-				    egui::Stroke::new(1.0, egui::Color32::WHITE),
-				));
-			}
-			
-			// Rita pilarna
-			if self.draw_yellow { draw_arrow(&painter, project(Vector3::zeros()), project(yellow_transformed), egui::Color32::YELLOW); }
-			if self.draw_purple { draw_arrow(&painter, project(Vector3::zeros()), project(purple_transformed), egui::Color32::from_rgb(160, 32, 240)); } // Lila
-			
-			
-			// Rita kryssprodukten (t.ex. vit eller cyan för att synas bra)
-			if self.draw_cross_vector && cross_prod.norm() > 0.001 {
-				draw_arrow(&painter, project(Vector3::zeros()), project(cross_prod), egui::Color32::WHITE);
-			}
+            // --- RENDER USER VECTORS (Loop) ---
+            for vec in &self.user_vectors {
+                if vec.visible {
+                    let transformed = m * vec.pos;
+                    draw_arrow(&painter, project(Vector3::zeros()), project(transformed), vec.color);
+                }
+            }
 
             // UI Elements (Nav Cube)
             draw_nav_cube(ui, &painter, &view_mat, self);
@@ -801,5 +749,3 @@ impl eframe::App for MatrixApp {
         ctx.request_repaint();
     }
 }
-
-
