@@ -25,6 +25,12 @@ pub fn is_near_identity(m: &Matrix3<f32>, eps: f32) -> bool {
 }
 
 
+pub fn snap(value: f32, step: f32) -> f32 {
+    (value / step).round() * step
+}
+
+
+
 pub fn real_eigenpairs_exact(m: &Matrix3<f32>, eps: f32) -> Vec<(Vector3<f32>, f32)> {
     let mut result = Vec::new();
     let values = m.complex_eigenvalues();

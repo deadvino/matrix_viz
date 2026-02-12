@@ -2,6 +2,7 @@ use eframe::egui;
 use nalgebra::{Matrix3, Vector3};
 use rand::Rng;
 
+use crate::math::snap;
 use crate::math::is_near_identity;
 use crate::math::matrix_rank_approx;
 use crate::math::real_eigenpairs_exact;
@@ -518,7 +519,7 @@ impl MatrixApp {
 					}
 
 
-					// --- NY SEKTION: SELECTOR FÖR BERÄKNINGAR ---
+					// menu for selecting math vectors
 					ui.add_space(10.0);
 					ui.separator();
 					ui.heading("Vector Interaction Math");
@@ -545,7 +546,7 @@ impl MatrixApp {
 					        });
 					});
 
-					// Beräkna baserat på valda index
+					// Calculate using chosen vectors
 					let v_a_raw = self.user_vectors[self.math_vec_a].pos;
 					let v_b_raw = self.user_vectors[self.math_vec_b].pos;
 					let v1 = self.current * v_a_raw;
@@ -609,58 +610,58 @@ impl eframe::App for MatrixApp {
                 rect.center() + egui::vec2(v_v.x * factor, -v_v.y * factor)
             };
 
-            // --- INPUT LOGIK FÖR ATT PLACERA VEKTORER (1-9, 0) ---
-            let wants_keyboard = ctx.wants_keyboard_input();
+            // --- INPUT LOGIC FOR VECTOR PLACEMENT (1-9, 0) ---
+			let wants_keyboard = ctx.wants_keyboard_input();
 			let input = ctx.input(|i| i.clone());
 					
 			let keys = [
-				egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5,
-				egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9, egui::Key::Num0
+			    egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5,
+			    egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9, egui::Key::Num0,
 			];
 					
-			// --- 1️⃣ EVENT-BASERAD START/STOP ---
+			// --- EVENT-BASED START ---
 			for event in &input.events {
-				if let egui::Event::Key {
-					key,
-					pressed,
-					modifiers,
-					..
-				} = event
-				{
-					for (idx, expected) in keys.iter().enumerate() {
-						if key == expected {
-						
-							// KEY PRESSED
-							if *pressed {
-								if !wants_keyboard && modifiers.alt {
-									self.active_placement = Some(idx);
-								}
-								else if !wants_keyboard {
-									// Toggle endast om vi INTE startar placement
-									self.user_vectors[idx].visible =
-										!self.user_vectors[idx].visible;
-								}
-							}
-						
-							// KEY RELEASED
-							if !pressed {
-								if self.active_placement == Some(idx) {
-									self.active_placement = None;
-								}
-							}
-						}
-					}
-				}
+			    if let egui::Event::Key { key, pressed, modifiers, .. } = event {
+			        for (idx, expected) in keys.iter().enumerate() {
+			            if key == expected && *pressed && !wants_keyboard && modifiers.alt {
+			                // Start placement for this vector
+			                self.active_placement = Some(idx);
+			            }
+			        }
+			    }
 			}
-
+			
+			// --- STOP PLACEMENT IF ALT IS RELEASED ---
+			if !input.modifiers.alt {
+			    self.active_placement = None;
+			}
+			
+			// --- GRID SNAP FLAG ---
+			// Snapping is default (true). Holding Ctrl disables snapping.
+			let snap_to_grid = input.modifiers.alt && !input.modifiers.ctrl;
+			
+			// --- PLACE VECTOR UNDER MOUSE ---
 			if let Some(idx) = self.active_placement {
 			    if resp.hovered() {
-			        if let Some(pos) = input.pointer.hover_pos() {
-			            self.place_vector_at_mouse(pos, rect, view_mat, idx);
+			        if let Some(mouse_pos) = input.pointer.hover_pos() {
+			            self.place_vector_at_mouse(mouse_pos, rect, view_mat, idx);
+					
+			            // Snap if needed
+			            if snap_to_grid {
+			                let v = &mut self.user_vectors[idx].pos;
+			                v.x = snap(v.x, 0.5);
+			                v.y = snap(v.y, 0.5);
+			            }
+					
 			            ctx.request_repaint();
 			        }
 			    }
 			}
+
+
+
+
+
 
 
             
