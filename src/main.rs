@@ -8,8 +8,6 @@ mod render;
 use app::MatrixApp;
 
 
-
-
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -23,16 +21,12 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 
-
-
-
 // --- Helpers ---
-
 
 fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
-    // Ladda emoji-font (fallback)
+    // Load emoji-font (fallback)
     fonts.font_data.insert(
         "emoji".to_owned(),
         egui::FontData::from_static(include_bytes!(
@@ -40,7 +34,6 @@ fn setup_fonts(ctx: &egui::Context) {
         )),
     );
 
-    // Lägg den SIST i proportional-fonten → fallback
     fonts
         .families
         .get_mut(&egui::FontFamily::Proportional)

@@ -17,7 +17,7 @@ use crate::render::draw_eigen_rays;
 use crate::render::draw_colored_unit_sphere;
 use crate::render::draw_flow_field;
 
-// --- NY HELPER STRUCT FÖR VEKTORER ---
+// --- HELPER STRUCT FoR VECTORS ---
 #[derive(Clone)]
 pub struct UserVector {
     pub pos: Vector3<f32>,
@@ -35,11 +35,10 @@ pub struct MatrixApp {
     anim_speed: f32,
     input: [[f32; 3]; 3],
     input_buffer: String,
-    
-    // --- NYTT: Lista med upp till 10 vektorer ---
+
     user_vectors: Vec<UserVector>,
-	math_vec_a: usize, // Index för första vektorn i kalkylen
-    math_vec_b: usize, // Index för andra vektorn i kalkylen
+	math_vec_a: usize,
+    math_vec_b: usize,
 	active_placement: Option<usize>,
     
     history: Vec<Matrix3<f32>>,
@@ -68,7 +67,6 @@ pub struct MatrixApp {
 
 impl Default for MatrixApp {
     fn default() -> Self {
-        // Skapa 10 vektorer med olika färger
         let mut vectors = Vec::new();
         let colors = [
             (egui::Color32::YELLOW, "Yellow (1)"),
@@ -89,7 +87,7 @@ impl Default for MatrixApp {
                      else if i == 1 { Vector3::new(-1.0, 1.0, 0.0) } 
                      else { Vector3::new(0.0, 0.0, 0.0) },
                 color: *col,
-                visible: i < 2, // Bara de två första synliga från start
+                visible: i < 2, // Only the first 2 visible at startup
                 name: name.to_string(),
             });
         }
@@ -202,7 +200,7 @@ impl MatrixApp {
     }
 
     fn handle_hotkeys(&mut self, ctx: &egui::Context) {
-        // Ignorera hotkeys om vi skriver i en textruta
+        // Ignore hotkeys if typing in an input field
         if ctx.wants_keyboard_input() { return; }
         
         let input = ctx.input(|i| i.clone());
@@ -313,7 +311,6 @@ impl MatrixApp {
         }
     }
 
-    // --- UPPDATERAD: Tar nu emot index istället för target_is_purple ---
     fn place_vector_at_mouse(&mut self, mouse_pos: egui::Pos2, rect: egui::Rect, view_mat: Matrix3<f32>, vec_idx: usize) {
         if vec_idx >= self.user_vectors.len() { return; }
         
@@ -325,7 +322,7 @@ impl MatrixApp {
         let world_dir = inv_view * Vector3::new(dx, dy, 0.0);
     
         self.user_vectors[vec_idx].pos = Vector3::new(world_dir.x, world_dir.y, 0.0);
-        self.user_vectors[vec_idx].visible = true; // Gör den synlig om man placerar den
+        self.user_vectors[vec_idx].visible = true; // Make visible if placing
     }
 
     fn generate_random_matrix(&mut self, range: f32, step: f32) {
@@ -406,7 +403,7 @@ impl MatrixApp {
         });
     }
 
-    // --- Generisk funktion för att rita UI för en vektor ---
+    // --- Generic function for drawing vector ui item ---
     fn draw_vector_ui_item(
         ui: &mut egui::Ui,
         idx: usize,
@@ -421,7 +418,7 @@ impl MatrixApp {
 
         if user_vector.visible {
             ui.indent("vec_indent", |ui| {
-                // Input fält
+                // Input field
                 ui.horizontal(|ui| {
                     for i in 0..3 {
                         let label = ["X", "Y", "Z"][i];
@@ -499,11 +496,9 @@ impl MatrixApp {
 
                     // --- VECTOR LIST UI ---
                     ui.add_space(10.0);
-                    // Inuti draw_sidebar()
 					ui.separator();
 					ui.heading("Vectors (Keys 1-9, 0)");
 
-					// Loopar igenom alla vektorer
 					for i in 0..self.user_vectors.len() {
 					    let vec = &mut self.user_vectors[i];
 
@@ -518,8 +513,7 @@ impl MatrixApp {
 					    }
 					}
 
-
-					// menu for selecting math vectors
+					// Menu for selecting math vectors
 					ui.add_space(10.0);
 					ui.separator();
 					ui.heading("Vector Interaction Math");
@@ -587,14 +581,14 @@ impl eframe::App for MatrixApp {
             
             let (rect, resp) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
             
-            // Input handling View Rotation
+            // Input handling view rotation
             if resp.dragged_by(egui::PointerButton::Primary) {
                 self.view_rot += resp.drag_delta().x * 0.01;
                 self.view_pitch = (self.view_pitch - resp.drag_delta().y * -0.01).clamp(-1.5, 1.5);
             }
             self.view_zoom = (self.view_zoom * (1.0 + ui.input(|i| i.smooth_scroll_delta.y) * 0.001)).clamp(0.1, 10.0);
 
-            // Setup Projection
+            // Setup projection
             let painter = ui.painter_at(rect);
             let view_mat = self.get_view_matrix();
             let base_scale = (rect.width().min(rect.height()) / 25.0) * self.view_zoom;
@@ -657,13 +651,6 @@ impl eframe::App for MatrixApp {
 			        }
 			    }
 			}
-
-
-
-
-
-
-
             
             // Animation
             if self.animating {
@@ -674,7 +661,7 @@ impl eframe::App for MatrixApp {
                 if self.anim_t >= 1.0 { self.current = self.target; self.animating = false; }
             }
 
-            // Render Scene
+            // --- RENDER SCENE ---
             if self.draw_flow_field {
                 draw_flow_field(&painter, &project, &self.current, 0.8, 6);
             }
@@ -735,7 +722,7 @@ impl eframe::App for MatrixApp {
                 }
             }
 
-            // --- RENDER USER VECTORS (Loop) ---
+            // --- RENDER USER VECTORS ---
             for vec in &self.user_vectors {
                 if vec.visible {
                     let transformed = m * vec.pos;

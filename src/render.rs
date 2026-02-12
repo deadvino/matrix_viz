@@ -10,21 +10,20 @@ use crate::app::MatrixApp;
 
 
 pub fn draw_grid_3d(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, m: &Matrix3<f32>, color: egui::Color32, size: i32) {
-    // Vi skapar en stroke baserat på färgen vi skickar in
     let stroke = egui::Stroke::new(1.0, color); 
     let s = size as f32;
     
     for i in -size..=size {
         let t = i as f32;
-        // XY Plan
+        // XY Plane
         painter.line_segment([project(m * Vector3::new(t, -s, 0.0)), project(m * Vector3::new(t, s, 0.0))], stroke);
         painter.line_segment([project(m * Vector3::new(-s, t, 0.0)), project(m * Vector3::new(s, t, 0.0))], stroke);
         
-        // XZ Plan
+        // XZ Plane
         painter.line_segment([project(m * Vector3::new(t, 0.0, -s)), project(m * Vector3::new(t, 0.0, s))], stroke);
         painter.line_segment([project(m * Vector3::new(-s, 0.0, t)), project(m * Vector3::new(s, 0.0, t))], stroke);
         
-        // YZ Plan
+        // YZ Plane
         painter.line_segment([project(m * Vector3::new(0.0, t, -s)), project(m * Vector3::new(0.0, t, s))], stroke);
         painter.line_segment([project(m * Vector3::new(0.0, -s, t)), project(m * Vector3::new(0.0, s, t))], stroke);
     }
@@ -67,7 +66,7 @@ pub fn draw_arrow(painter: &egui::Painter, start: egui::Pos2, end: egui::Pos2, c
 
 pub fn draw_origin_planes(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> egui::Pos2, size: i32) {
     let identity = nalgebra::Matrix3::identity();
-    // Vi använder en diskret grå färg med låg opacitet för det statiska rutnätet
+    // Nice and quiet gray colour for static grid
     let color = egui::Color32::from_rgba_unmultiplied(150, 150, 150, 40);
     
     draw_grid_3d(
@@ -118,7 +117,7 @@ fn draw_unit_cube(painter: &egui::Painter, project: &impl Fn(Vector3<f32>) -> eg
 			center_screen,
 	        egui::Align2::CENTER_CENTER,
 	        format!("Vol: {:.2}", abs_det),
-	        egui::FontId::proportional(14.0), // Changed from .bold()
+	        egui::FontId::proportional(14.0),
 	        egui::Color32::WHITE
 	    );
 	}
@@ -143,10 +142,10 @@ pub fn draw_determinant_geometry(
                 project(a + b),
                 project(b),
             ];
-			// Kamera-normal i world space
+			// Camera-normal in world space
 			let view_normal = Vector3::new(0.0, 0.0, 1.0);
 
-			// Orientering (signerad area)
+			// Orientation (signed area)
 			let signed_area = a.cross(&b).dot(&view_normal);
 
 			let color = if signed_area >= 0.0 {
@@ -202,42 +201,6 @@ pub fn draw_eigen_rays(
 }
 
 
-// pub fn draw_deformed_sphere(
-//     painter: &egui::Painter,
-//     project: &impl Fn(Vector3<f32>) -> egui::Pos2,
-//     m: &Matrix3<f32>,
-// ) {
-//     let sphere = sample_unit_sphere(16, 32);
-
-//     let stroke = egui::Stroke::new(
-//         1.0,
-//         egui::Color32::from_rgba_unmultiplied(200, 200, 255, 80),
-//     );
-
-//     let rows = 17; // n_theta + 1
-//     let cols = 33; // n_phi + 1
-
-//     for i in 0..rows {
-//         for j in 0..cols {
-//             let idx = i * cols + j;
-//             let p = m * sphere[idx];
-
-//             // longitud
-//             if j + 1 < cols {
-//                 let q = m * sphere[idx + 1];
-//                 painter.line_segment([project(p), project(q)], stroke);
-//             }
-
-//             // latitud
-//             if i + 1 < rows {
-//                 let q = m * sphere[idx + cols];
-//                 painter.line_segment([project(p), project(q)], stroke);
-//             }
-//         }
-//     }
-// }
-
-
 pub fn draw_colored_unit_sphere(
     painter: &egui::Painter,
     project: &impl Fn(Vector3<f32>) -> egui::Pos2,
@@ -255,7 +218,7 @@ pub fn draw_colored_unit_sphere(
 
         let t = (radial / (radial + tangent + 1e-6)).clamp(0.0, 1.0);
 
-        // röd → gul → grön
+        // red -> yellow -> green
         let color = egui::Color32::from_rgb(
             (255.0 * (1.0 - t.powi(2))) as u8,
             (255.0 * t.powi(2)) as u8,
