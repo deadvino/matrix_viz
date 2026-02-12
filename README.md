@@ -3,6 +3,8 @@
 An interactive, real-time **linear algebra visualizer** built in **Rust** using **eframe (egui)** and **nalgebra**.  
 Manipulate **3×3 matrices** and instantly see how they transform 3D space through smooth animations and a CAD-style viewport.
 
+A result of studing and vibe co-coding with a fed different LLM:s
+
 ---
 
 ## ✨ Features
@@ -12,9 +14,9 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 - **Smooth Animations** – Transitions are interpolated using *smoothstep* to clearly visualize transformation paths.
 
 ### 📍 Vector Tools
-- **Custom Vector Placement (Yellow Vector)**
+- **Custom Vector Placement**
   - Manually input coordinates.
-  - Hold **`Space`** to “pick up” and place the vector on the **XY-plane** using the mouse.
+  - Hold **`alt`** to “pick up” and place the vector on the **XY-plane** using the mouse.
 
 ### 🧭 CAD-Style Viewport
 - **Rotation:** Left-click + drag (Yaw / Pitch)
@@ -33,6 +35,10 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 - **Transformation History**
   - Press **`A`** to apply and stack transformations  
     M_total = M_n × … × M_0
+    M -1 is the inverse of M_total'
+- **Movement visualisations**
+  - Flow field on XY-plane
+  - Unit sphere with tangent/radial deformation coloring
 
 ---
 
@@ -45,8 +51,10 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 | **A** | Apply current matrix to history |
 | **Ctrl + Z** | Undo last applied transformation |
 | **C** | Clear history and reset to Identity |
-| **Space** | Hold to drag vector |
-| **Shift + Space** | Hold to drag 2nd vector |
+| **E** | Draw lines coinciding with eigenvectors |
+| **R/O** | Generate Random/Random Orthogonal Matrix |
+| **Alt + number key** | Hold to drag vector |
+| **Ctrl** | Hold to disable snapping when placing vector |
 
 ---
 
@@ -65,6 +73,7 @@ Manipulate **3×3 matrices** and instantly see how they transform 3D space throu
 Install the Rust toolchain from:  
 https://rustup.rs/
 
+Download Visual Studio build tools - Desktop development with C++:
 https://visualstudio.microsoft.com/visual-cpp-build-tools/
 
 ### Installation & Execution
