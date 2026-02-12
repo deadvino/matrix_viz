@@ -3,7 +3,7 @@
 An interactive, real-time **linear algebra visualizer** built in **Rust** using **eframe (egui)** and **nalgebra**.  
 Manipulate **3×3 matrices** and instantly see how they transform 3D space through smooth animations and a CAD-style viewport.
 
-A result of studying and vibe co-coding with a fed different LLM:s
+A result of studying and vibe co-coding with a few different LLM:s
 
 ---
 
@@ -80,7 +80,7 @@ https://visualstudio.microsoft.com/visual-cpp-build-tools/
 
 Clone the repository:
 
-    git clone https://github.com/your-username/matrix-visualizer.git
+    git clone https://github.com/deadvino/matrix-visualizer.git
     cd matrix-visualizer
 
 Run the project:
