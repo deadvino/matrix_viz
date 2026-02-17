@@ -115,3 +115,69 @@ pub fn matrix_rank_approx(m: &Matrix3<f32>, eps: f32) -> usize {
         0
     }
 }
+
+
+pub fn parse_plane_equation(equation: &str) -> Option<(f32, f32, f32, f32)> {
+    let equation = equation.replace(" ", "");
+    let parts: Vec<&str> = equation.split('=').collect();
+
+    if parts.len() != 2 || parts[1] != "0" {
+        return None;
+    }
+
+    let mut a = 0.0;
+    let mut b = 0.0;
+    let mut c = 0.0;
+    let mut d = 0.0;
+
+    // Split terms
+    let terms = parts[0].split('+');
+    for term in terms {
+        if term.contains('x') {
+            let coeff = term.replace("x", "");
+            a = if coeff.is_empty() { 1.0 } else { coeff.parse().unwrap_or(0.0) };
+        } else if term.contains('y') {
+            let coeff = term.replace("y", "");
+            b = if coeff.is_empty() { 1.0 } else { coeff.parse().unwrap_or(0.0) };
+        } else if term.contains('z') {
+            let coeff = term.replace("z", "");
+            c = if coeff.is_empty() { 1.0 } else { coeff.parse().unwrap_or(0.0) };
+        } else if !term.is_empty() {
+            d = term.parse().unwrap_or(0.0);
+        }
+    }
+
+    Some((a, b, c, d))
+}
+
+
+pub fn parse_line_equation(equation: &str) -> Option<(Vector3<f32>, Vector3<f32>)> {
+    let equation = equation.replace(" ", "");
+    let parts: Vec<&str> = equation.split('+').collect();
+
+    if parts.len() != 2 {
+        return None;
+    }
+
+    // Parse point
+    let point_str = parts[0].trim_start_matches("(x,y,z)=").trim_matches(|c| c == '(' || c == ')');
+    let point_coords: Vec<f32> = point_str.split(',')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if point_coords.len() != 3 {
+        return None;
+    }
+    let point = Vector3::new(point_coords[0], point_coords[1], point_coords[2]);
+
+    // Parse direction
+    let dir_str = parts[1].trim_start_matches('t').trim_matches(|c| c == '(' || c == ')');
+    let dir_coords: Vec<f32> = dir_str.split(',')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if dir_coords.len() != 3 {
+        return None;
+    }
+    let direction = Vector3::new(dir_coords[0], dir_coords[1], dir_coords[2]);
+
+    Some((point, direction))
+}

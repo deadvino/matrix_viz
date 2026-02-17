@@ -6,6 +6,8 @@ use crate::math::snap;
 use crate::math::is_near_identity;
 use crate::math::matrix_rank_approx;
 use crate::math::real_eigenpairs_exact;
+use crate::math::parse_line_equation;
+use crate::math::parse_plane_equation;
 
 use crate::render::draw_grid_3d;
 use crate::render::draw_axes_3d;
@@ -16,6 +18,8 @@ use crate::render::draw_determinant_geometry;
 use crate::render::draw_eigen_rays;
 use crate::render::draw_colored_unit_sphere;
 use crate::render::draw_flow_field;
+use crate::render::draw_line;
+use crate::render::draw_plane;
 
 // --- HELPER STRUCT FoR VECTORS ---
 #[derive(Clone)]
@@ -35,6 +39,11 @@ pub struct MatrixApp {
     anim_speed: f32,
     input: [[f32; 3]; 3],
     input_buffer: String,
+
+	plane_equation: String,
+    show_plane: bool,
+    line_equation: String,
+    show_line: bool,
 
     user_vectors: Vec<UserVector>,
 	math_vec_a: usize,
@@ -103,6 +112,11 @@ impl Default for MatrixApp {
             view_pitch: 0.3,
             view_zoom: 1.0,
             input_buffer: String::new(),
+
+			plane_equation: "x + y + z = 0".to_string(),
+            show_plane: false,
+            line_equation: "(x,y,z) = (1,1,1) + t(1,2,3)".to_string(),
+            show_line: false,
             
             draw_planes: true,
             draw_parallelogram: false,
@@ -492,6 +506,21 @@ impl MatrixApp {
                         ui.colored_label(egui::Color32::GRAY, "No real eigenvectors");
                     }
 
+					ui.add_space(10.0);
+					ui.separator();
+					ui.heading("Geometric Objects");
+
+					ui.checkbox(&mut self.show_plane, "Show Plane");
+					ui.text_edit_singleline(&mut self.plane_equation);
+					ui.label("Plane format: x + 2y - z + 1 = 0");
+
+					ui.add_space(5.0);
+
+					ui.checkbox(&mut self.show_line, "Show Line");
+					ui.text_edit_singleline(&mut self.line_equation);
+					ui.label("Line format: (x,y,z) = (1,2,3) + t(4,5,6)");
+
+
                     // --- VECTOR LIST UI ---
                     ui.add_space(10.0);
 					ui.separator();
@@ -686,6 +715,55 @@ impl eframe::App for MatrixApp {
             if self.draw_eigen_rays && !is_near_identity(&self.current, 1e-5) {
                 draw_eigen_rays(&painter, &project, &self.current);
             }
+			
+
+			// Draw geometric objects
+			if self.show_plane {
+			    if let Some((a, b, c, d)) = parse_plane_equation(&self.plane_equation) {
+			        // Create the plane equation in homogeneous coordinates
+			        let plane_normal = self.current.transpose() * Vector3::new(a, b, c);
+			        let plane_normal = plane_normal.normalize();
+				
+			        // Transform a point on the plane
+			        let point_on_plane = if a != 0.0 {
+			            Vector3::new(-d/a, 0.0, 0.0)
+			        } else if b != 0.0 {
+			            Vector3::new(0.0, -d/b, 0.0)
+			        } else {
+			            Vector3::new(0.0, 0.0, -d/c)
+			        };
+			        let transformed_point = self.current * point_on_plane;
+				
+			        // Calculate new d value for the transformed plane
+			        let new_d = -plane_normal.dot(&transformed_point);
+				
+			        draw_plane(
+			            &painter,
+			            &project,
+			            plane_normal.x, plane_normal.y, plane_normal.z, new_d,
+			            10.0,
+			            egui::Color32::from_rgba_unmultiplied(100, 200, 100, 100)
+			        );
+			    }
+			}
+			
+			if self.show_line {
+			    if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
+			        let transformed_point = self.current * point;
+			        let transformed_direction = self.current * direction;
+				
+			        draw_line(
+			            &painter,
+			            &project,
+			            transformed_point,
+			            transformed_direction,
+			            20.0,
+			            egui::Color32::from_rgba_unmultiplied(200, 100, 100, 200)
+			        );
+			    }
+			}
+
+
             
             draw_axes_3d(&painter, &project);
             

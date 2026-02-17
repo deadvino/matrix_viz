@@ -340,3 +340,85 @@ pub fn draw_nav_cube(ui: &egui::Ui, painter: &egui::Painter, view_mat: &Matrix3<
         }
     }
 }
+
+
+pub fn draw_plane(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    a: f32,
+    b: f32,
+    c: f32,
+    d: f32,
+    size: f32,
+    color: egui::Color32,
+) {
+    let normal = Vector3::new(a, b, c).normalize();
+    let point_on_plane = if a != 0.0 {
+        Vector3::new(-d/a, 0.0, 0.0)
+    } else if b != 0.0 {
+        Vector3::new(0.0, -d/b, 0.0)
+    } else if c != 0.0 {
+        Vector3::new(0.0, 0.0, -d/c)
+    } else {
+        return;
+    };
+
+    let u = if normal.x.abs() > 0.1 {
+        Vector3::new(normal.y, -normal.x, 0.0).normalize()
+    } else {
+        Vector3::new(0.0, normal.z, -normal.y).normalize()
+    };
+    let v = normal.cross(&u).normalize();
+
+    let stroke = egui::Stroke::new(1.0, color);
+    let half_size = size * 0.5;
+
+    for i in -10..=10 {
+        let t = i as f32 * 0.1;
+        painter.line_segment(
+            [project(point_on_plane + u * half_size + v * t * size),
+             project(point_on_plane - u * half_size + v * t * size)],
+            stroke,
+        );
+        painter.line_segment(
+            [project(point_on_plane + v * half_size + u * t * size),
+             project(point_on_plane - v * half_size + u * t * size)],
+            stroke,
+        );
+    }
+}
+
+
+pub fn draw_line(
+    painter: &egui::Painter,
+    project: &impl Fn(Vector3<f32>) -> egui::Pos2,
+    point: Vector3<f32>,
+    direction: Vector3<f32>,
+    length: f32,
+    color: egui::Color32,
+) {
+    let dir_normalized = direction.normalize();
+    let start = point - dir_normalized * length * 0.5;
+    let end = point + dir_normalized * length * 0.5;
+
+    painter.line_segment(
+        [project(start), project(end)],
+        egui::Stroke::new(2.0, color),
+    );
+
+    // // Draw arrowhead
+    // let arrow_size = length * 0.1;
+    // let arrow_dir = dir_normalized * arrow_size;
+    // let perp1 = arrow_dir.perp(&Vector3::x()).normalize() * arrow_size * 0.3;
+    // let perp2 = arrow_dir.perp(&Vector3::y()).normalize() * arrow_size * 0.3;
+
+    // painter.add(egui::Shape::convex_polygon(
+    //     vec![
+    //         project(end),
+    //         project(end - arrow_dir + perp1),
+    //         project(end - arrow_dir + perp2),
+    //     ],
+    //     color,
+    //     egui::Stroke::NONE,
+    // ));
+}
