@@ -6,8 +6,6 @@ use crate::math::snap;
 use crate::math::is_near_identity;
 use crate::math::matrix_rank_approx;
 use crate::math::real_eigenpairs_exact;
-use crate::math::parse_line_equation;
-use crate::math::parse_plane_equation;
 // use crate::math::line_line_intersection;
 use crate::math::line_plane_intersection;
 
@@ -42,10 +40,15 @@ pub struct MatrixApp {
     input: [[f32; 3]; 3],
     input_buffer: String,
 
-	plane_equation: String,
     show_plane: bool,
-    line_equation: String,
     show_line: bool,
+	// Plane: ax + by + cz + d = 0
+    plane_input: [f32; 4],
+    plane_input_buffer: String,
+    // Line: (x,y,z) = (px,py,pz) + t(dx,dy,dz)
+    line_point_input: [f32; 3],
+    line_dir_input: [f32; 3],
+    line_input_buffer: String,
 	plane_line_intersection: Option<Vector3<f32>>,
     closest_point: Option<Vector3<f32>>,
 
@@ -117,10 +120,15 @@ impl Default for MatrixApp {
             view_zoom: 1.0,
             input_buffer: String::new(),
 
-			plane_equation: "x + y + z = 0".to_string(),
             show_plane: false,
-            line_equation: "(x,y,z) = (1,1,1) + t(1,2,3)".to_string(),
             show_line: false,
+			// Plane defaults: x + y + z = 0
+            plane_input: [1.0, 1.0, 1.0, 0.0],
+            plane_input_buffer: String::new(),
+            // Line defaults: (1,1,1) + t(1,2,3)
+            line_point_input: [1.0, 1.0, 1.0],
+            line_dir_input: [1.0, 2.0, 3.0],
+            line_input_buffer: String::new(),
 			plane_line_intersection: None,
             closest_point: None,
             
@@ -147,6 +155,18 @@ impl Default for MatrixApp {
 }
 
 impl MatrixApp {
+
+	fn plane_to_string(&self) -> String {
+        let [a, b, c, d] = self.plane_input;
+        format!("{:.2}x + {:.2}y + {:.2}z + {:.2} = 0", a, b, c, d)
+    }
+
+    fn line_to_string(&self) -> String {
+        let [px, py, pz] = self.line_point_input;
+        let [dx, dy, dz] = self.line_dir_input;
+        format!("({:.2},{:.2},{:.2}) + t({:.2},{:.2},{:.2})", px, py, pz, dx, dy, dz)
+    }
+
     fn recalculate_target(&mut self) {
         let mut new_target = Matrix3::identity();
         for mat in &self.history {
@@ -512,72 +532,93 @@ impl MatrixApp {
                         ui.colored_label(egui::Color32::GRAY, "No real eigenvectors");
                     }
 
-					// - Geometric objects
-
+					// --- Geometric Objects Section ---
 					ui.add_space(10.0);
 					ui.separator();
 					ui.heading("Geometric Objects");
 
 					ui.checkbox(&mut self.show_plane, "Show Plane");
-					ui.text_edit_singleline(&mut self.plane_equation);
-					ui.label("Plane format: x + 2y - z + 1 = 0");
 
+					// Draw plane equation in readable format
+					ui.label("Plane: ax + by + cz + d = 0");
+					egui::Grid::new("plane_input_grid").spacing([5.0, 5.0]).show(ui, |ui| {
+					    for i in 0..4 {
+					        let label = ["a:", "b:", "c:", "d:"][i];
+					        ui.label(label);
+					        let id = ui.make_persistent_id(format!("plane_input_{}", i));
+					        Self::handle_buffered_input(ui, id, &mut self.plane_input_buffer, &mut self.plane_input[i]);
+					    }
+					    ui.end_row();
+					});
+					ui.label(self.plane_to_string());
 					ui.add_space(5.0);
 
 					ui.checkbox(&mut self.show_line, "Show Line");
-					ui.text_edit_singleline(&mut self.line_equation);
-					ui.label("Line format: (x,y,z) = (1,2,3) + t(4,5,6)");
+
+					// Draw line equation in readable format
+					ui.label("Line: (x,y,z) = P + t·D");
+					egui::Grid::new("line_point_grid").spacing([5.0, 5.0]).show(ui, |ui| {
+					    ui.label("Point P:");
+					    for i in 0..3 {
+					        let id = ui.make_persistent_id(format!("line_point_{}", i));
+					        Self::handle_buffered_input(ui, id, &mut self.line_input_buffer, &mut self.line_point_input[i]);
+					    }
+					    ui.end_row();
+					
+					    ui.label("Dir D:");
+					    for i in 0..3 {
+					        let id = ui.make_persistent_id(format!("line_dir_{}", i));
+					        Self::handle_buffered_input(ui, id, &mut self.line_input_buffer, &mut self.line_dir_input[i]);
+					    }
+					    ui.end_row();
+					});
+					ui.label(self.line_to_string());
 
 					// Intersection section
-					// In your draw_sidebar method, replace the Intersection section:
 					if self.show_plane || self.show_line {
 					    ui.add_space(10.0);
 					    ui.separator();
 					    ui.heading("Intersections");
 					
 					    if self.show_plane && self.show_line {
-					        if let (Some((a, b, c, d)), Some((point, direction))) =
-					            (parse_plane_equation(&self.plane_equation),
-					             parse_line_equation(&self.line_equation)) {
-								
-					            // Transform both plane and line to transformed space
-					            let normal = Vector3::new(a, b, c);
-					            let transformed_normal = if let Some(inv) = self.current.try_inverse() {
-					                (inv.transpose() * normal).normalize()
-					            } else {
-					                normal.normalize()
-					            };
-							
-					            let plane_point = if a != 0.0 {
-					                Vector3::new(-d/a, 0.0, 0.0)
-					            } else if b != 0.0 {
-					                Vector3::new(0.0, -d/b, 0.0)
-					            } else {
-					                Vector3::new(0.0, 0.0, -d/c)
-					            };
-					            let transformed_plane_point = self.current * plane_point;
-					            let transformed_d = -transformed_normal.dot(&transformed_plane_point);
-							
-					            let transformed_point = self.current * point;
-					            let transformed_direction = self.current * direction;
-							
-					            // Calculate intersection in TRANSFORMED SPACE
-					            if let Some(intersection) = line_plane_intersection(
-					                transformed_point,
-					                transformed_direction,
-					                transformed_normal,
-					                transformed_d) {
-									
-					                ui.label(format!("Intersection (transformed): ({:.2}, {:.2}, {:.2})",
-					                    intersection.x, intersection.y, intersection.z));
-									
-					                // Store the intersection - it's already in transformed space!
-					                self.plane_line_intersection = Some(intersection);
-					            } else {
-					                ui.label("No intersection (parallel)");
-					                self.plane_line_intersection = None;
-					            }
+					        // Plane: ax + by + cz + d = 0
+					        let [a, b, c, d] = self.plane_input;
+					        let normal = Vector3::new(a, b, c);
+						
+					        // Line: P + t*D
+					        let point = Vector3::new(self.line_point_input[0], self.line_point_input[1], self.line_point_input[2]);
+					        let direction = Vector3::new(self.line_dir_input[0], self.line_dir_input[1], self.line_dir_input[2]);
+						
+					        let transformed_normal = if let Some(inv) = self.current.try_inverse() {
+					            (inv.transpose() * normal).normalize()
 					        } else {
+					            normal.normalize()
+					        };
+						
+					        let plane_point = if a.abs() > 1e-6 {
+					            Vector3::new(-d/a, 0.0, 0.0)
+					        } else if b.abs() > 1e-6 {
+					            Vector3::new(0.0, -d/b, 0.0)
+					        } else {
+					            Vector3::new(0.0, 0.0, -d/c)
+					        };
+					        let transformed_plane_point = self.current * plane_point;
+					        let transformed_d = -transformed_normal.dot(&transformed_plane_point);
+						
+					        let transformed_point = self.current * point;
+					        let transformed_direction = self.current * direction;
+						
+					        if let Some(intersection) = line_plane_intersection(
+					            transformed_point,
+					            transformed_direction,
+					            transformed_normal,
+					            transformed_d) {
+								
+					            ui.label(format!("Intersection: ({:.2}, {:.2}, {:.2})",
+					                intersection.x, intersection.y, intersection.z));
+					            self.plane_line_intersection = Some(intersection);
+					        } else {
+					            ui.label("No intersection (parallel)");
 					            self.plane_line_intersection = None;
 					        }
 					    } else {
@@ -585,37 +626,30 @@ impl MatrixApp {
 					    }
 					
 					    if self.show_line {
-							if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
-								// Transform to get line in transformed space
-								let transformed_point = self.current * point;
-								let transformed_direction = self.current * direction;
+					        let point = Vector3::new(self.line_point_input[0], self.line_point_input[1], self.line_point_input[2]);
+					        let direction = Vector3::new(self.line_dir_input[0], self.line_dir_input[1], self.line_dir_input[2]);
+						
+					        let transformed_point = self.current * point;
+					        let transformed_direction = self.current * direction;
+						
+					        let d_dot_d = transformed_direction.dot(&transformed_direction);
+						
+					        if d_dot_d > 1e-6 {
+					            let t = -transformed_direction.dot(&transformed_point) / d_dot_d;
+					            let closest = transformed_point + transformed_direction * t;
 							
-								// Calculate t for the closest point to origin
-								// Line: L(t) = p + t * d
-								// Closest point: t = -(d · p) / (d · d)
-								// Closest = p + t * d
-								let d_dot_d = transformed_direction.dot(&transformed_direction);
+					            ui.label(format!("Closest to origin: ({:.2}, {:.2}, {:.2})",
+					                closest.x, closest.y, closest.z));
 							
-								if d_dot_d > 1e-6 {
-									let t = -transformed_direction.dot(&transformed_point) / d_dot_d;
-									let closest = transformed_point + transformed_direction * t;
-								
-									ui.label(format!("Closest to origin (transformed): ({:.2}, {:.2}, {:.2})",
-										closest.x, closest.y, closest.z));
-								
-									// Store the closest point - already in transformed space!
-									self.closest_point = Some(closest);
-								} else {
-									self.closest_point = None;
-								}
-							} else {
-								self.closest_point = None;
-							}
-						} else {
-							self.closest_point = None;
-						}
-
+					            self.closest_point = Some(closest);
+					        } else {
+					            self.closest_point = None;
+					        }
+					    } else {
+					        self.closest_point = None;
+					    }
 					}
+
 
 
 
@@ -818,10 +852,10 @@ impl eframe::App for MatrixApp {
 
 			// Draw Plane Object
 			if self.show_plane {
-				if let Some((a, b, c, d)) = parse_plane_equation(&self.plane_equation) {
-					// Transform the plane equation by the current matrix
-					// For a plane: ax + by + cz + d = 0
-					// Under transformation M, the new normal is (M^-1)^T * n
+				let [a, b, c, d] = self.plane_input;
+			
+				// Handle edge case where all coefficients might be zero
+				if a.abs() > 1e-6 || b.abs() > 1e-6 || c.abs() > 1e-6 {
 					let normal = Vector3::new(a, b, c);
 					let transformed_normal = if let Some(inv) = self.current.try_inverse() {
 						(inv.transpose() * normal).normalize()
@@ -829,17 +863,14 @@ impl eframe::App for MatrixApp {
 						normal.normalize()
 					};
 				
-					// Find a point on the original plane and transform it
-					let point_on_plane = if a != 0.0 {
+					let point_on_plane = if a.abs() > 1e-6 {
 						Vector3::new(-d/a, 0.0, 0.0)
-					} else if b != 0.0 {
+					} else if b.abs() > 1e-6 {
 						Vector3::new(0.0, -d/b, 0.0)
 					} else {
 						Vector3::new(0.0, 0.0, -d/c)
 					};
 					let transformed_point = self.current * point_on_plane;
-				
-					// Calculate new d value: d' = -n'·x'
 					let new_d = -transformed_normal.dot(&transformed_point);
 				
 					draw_plane(
@@ -852,22 +883,24 @@ impl eframe::App for MatrixApp {
 				}
 			}
 			
+			// Draw Line Object
 			if self.show_line {
-				if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
-					// Transform the line
-					let transformed_point = self.current * point;
-					let transformed_direction = self.current * direction;
-				
-					draw_line(
-						&painter,
-						&project,
-						transformed_point,
-						transformed_direction,
-						20.0,
-						egui::Color32::from_rgba_unmultiplied(200, 100, 100, 200)
-					);
-				}
+				let point = Vector3::new(self.line_point_input[0], self.line_point_input[1], self.line_point_input[2]);
+				let direction = Vector3::new(self.line_dir_input[0], self.line_dir_input[1], self.line_dir_input[2]);
+			
+				let transformed_point = self.current * point;
+				let transformed_direction = self.current * direction;
+			
+				draw_line(
+					&painter,
+					&project,
+					transformed_point,
+					transformed_direction,
+					20.0,
+					egui::Color32::from_rgba_unmultiplied(200, 100, 100, 200)
+				);
 			}
+			
 
 
 			// Draw intersection points if they exist
