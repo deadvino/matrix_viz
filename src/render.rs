@@ -352,17 +352,22 @@ pub fn draw_plane(
     size: f32,
     color: egui::Color32,
 ) {
-    let normal = Vector3::new(a, b, c).normalize();
-    let point_on_plane = if a != 0.0 {
-        Vector3::new(-d/a, 0.0, 0.0)
-    } else if b != 0.0 {
-        Vector3::new(0.0, -d/b, 0.0)
-    } else if c != 0.0 {
-        Vector3::new(0.0, 0.0, -d/c)
-    } else {
+    let normal = Vector3::new(a, b, c);
+    if normal.norm() < 1e-6 {
         return;
+    }
+    let normal = normal.normalize();
+
+    // Find a point on the plane
+    let point_on_plane = if a.abs() > b.abs() && a.abs() > c.abs() {
+        Vector3::new(-d/a, 0.0, 0.0)
+    } else if b.abs() > c.abs() {
+        Vector3::new(0.0, -d/b, 0.0)
+    } else {
+        Vector3::new(0.0, 0.0, -d/c)
     };
 
+    // Find two orthogonal vectors in the plane
     let u = if normal.x.abs() > 0.1 {
         Vector3::new(normal.y, -normal.x, 0.0).normalize()
     } else {
@@ -370,6 +375,7 @@ pub fn draw_plane(
     };
     let v = normal.cross(&u).normalize();
 
+    // Draw a grid on the plane
     let stroke = egui::Stroke::new(1.0, color);
     let half_size = size * 0.5;
 
@@ -387,6 +393,7 @@ pub fn draw_plane(
         );
     }
 }
+
 
 
 pub fn draw_line(

@@ -181,3 +181,36 @@ pub fn parse_line_equation(equation: &str) -> Option<(Vector3<f32>, Vector3<f32>
 
     Some((point, direction))
 }
+
+
+pub fn line_plane_intersection(
+    line_point: Vector3<f32>,
+    line_dir: Vector3<f32>,
+    plane_normal: Vector3<f32>,
+    plane_d: f32
+) -> Option<Vector3<f32>> {
+    let denom = plane_normal.dot(&line_dir);
+    if denom.abs() < 1e-6 {
+        return None; // Line is parallel to plane
+    }
+
+    let t = -(plane_normal.dot(&line_point) + plane_d) / denom;
+    Some(line_point + line_dir * t)
+}
+
+
+pub fn line_line_intersection(
+    p1: Vector3<f32>,
+    d1: Vector3<f32>,
+    p2: Vector3<f32>,
+    d2: Vector3<f32>
+) -> Option<Vector3<f32>> {
+    let d1_cross_d2 = d1.cross(&d2);
+    if d1_cross_d2.norm() < 1e-6 {
+        return None; // Lines are parallel
+    }
+
+    let p2_minus_p1 = p2 - p1;
+    let t = p2_minus_p1.cross(&d2).dot(&d1_cross_d2) / d1_cross_d2.norm_squared();
+    Some(p1 + d1 * t)
+}

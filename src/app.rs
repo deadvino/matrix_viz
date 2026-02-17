@@ -8,6 +8,8 @@ use crate::math::matrix_rank_approx;
 use crate::math::real_eigenpairs_exact;
 use crate::math::parse_line_equation;
 use crate::math::parse_plane_equation;
+// use crate::math::line_line_intersection;
+use crate::math::line_plane_intersection;
 
 use crate::render::draw_grid_3d;
 use crate::render::draw_axes_3d;
@@ -44,6 +46,8 @@ pub struct MatrixApp {
     show_plane: bool,
     line_equation: String,
     show_line: bool,
+	plane_line_intersection: Option<Vector3<f32>>,
+    closest_point: Option<Vector3<f32>>,
 
     user_vectors: Vec<UserVector>,
 	math_vec_a: usize,
@@ -117,6 +121,8 @@ impl Default for MatrixApp {
             show_plane: false,
             line_equation: "(x,y,z) = (1,1,1) + t(1,2,3)".to_string(),
             show_line: false,
+			plane_line_intersection: None,
+            closest_point: None,
             
             draw_planes: true,
             draw_parallelogram: false,
@@ -506,6 +512,8 @@ impl MatrixApp {
                         ui.colored_label(egui::Color32::GRAY, "No real eigenvectors");
                     }
 
+					// - Geometric objects
+
 					ui.add_space(10.0);
 					ui.separator();
 					ui.heading("Geometric Objects");
@@ -519,6 +527,97 @@ impl MatrixApp {
 					ui.checkbox(&mut self.show_line, "Show Line");
 					ui.text_edit_singleline(&mut self.line_equation);
 					ui.label("Line format: (x,y,z) = (1,2,3) + t(4,5,6)");
+
+					// Intersection section
+					// In your draw_sidebar method, replace the Intersection section:
+					if self.show_plane || self.show_line {
+					    ui.add_space(10.0);
+					    ui.separator();
+					    ui.heading("Intersections");
+					
+					    if self.show_plane && self.show_line {
+					        if let (Some((a, b, c, d)), Some((point, direction))) =
+					            (parse_plane_equation(&self.plane_equation),
+					             parse_line_equation(&self.line_equation)) {
+								
+					            // Transform both plane and line to transformed space
+					            let normal = Vector3::new(a, b, c);
+					            let transformed_normal = if let Some(inv) = self.current.try_inverse() {
+					                (inv.transpose() * normal).normalize()
+					            } else {
+					                normal.normalize()
+					            };
+							
+					            let plane_point = if a != 0.0 {
+					                Vector3::new(-d/a, 0.0, 0.0)
+					            } else if b != 0.0 {
+					                Vector3::new(0.0, -d/b, 0.0)
+					            } else {
+					                Vector3::new(0.0, 0.0, -d/c)
+					            };
+					            let transformed_plane_point = self.current * plane_point;
+					            let transformed_d = -transformed_normal.dot(&transformed_plane_point);
+							
+					            let transformed_point = self.current * point;
+					            let transformed_direction = self.current * direction;
+							
+					            // Calculate intersection in TRANSFORMED SPACE
+					            if let Some(intersection) = line_plane_intersection(
+					                transformed_point,
+					                transformed_direction,
+					                transformed_normal,
+					                transformed_d) {
+									
+					                ui.label(format!("Intersection (transformed): ({:.2}, {:.2}, {:.2})",
+					                    intersection.x, intersection.y, intersection.z));
+									
+					                // Store the intersection - it's already in transformed space!
+					                self.plane_line_intersection = Some(intersection);
+					            } else {
+					                ui.label("No intersection (parallel)");
+					                self.plane_line_intersection = None;
+					            }
+					        } else {
+					            self.plane_line_intersection = None;
+					        }
+					    } else {
+					        self.plane_line_intersection = None;
+					    }
+					
+					    if self.show_line {
+							if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
+								// Transform to get line in transformed space
+								let transformed_point = self.current * point;
+								let transformed_direction = self.current * direction;
+							
+								// Calculate t for the closest point to origin
+								// Line: L(t) = p + t * d
+								// Closest point: t = -(d · p) / (d · d)
+								// Closest = p + t * d
+								let d_dot_d = transformed_direction.dot(&transformed_direction);
+							
+								if d_dot_d > 1e-6 {
+									let t = -transformed_direction.dot(&transformed_point) / d_dot_d;
+									let closest = transformed_point + transformed_direction * t;
+								
+									ui.label(format!("Closest to origin (transformed): ({:.2}, {:.2}, {:.2})",
+										closest.x, closest.y, closest.z));
+								
+									// Store the closest point - already in transformed space!
+									self.closest_point = Some(closest);
+								} else {
+									self.closest_point = None;
+								}
+							} else {
+								self.closest_point = None;
+							}
+						} else {
+							self.closest_point = None;
+						}
+
+					}
+
+
 
 
                     // --- VECTOR LIST UI ---
@@ -717,48 +816,89 @@ impl eframe::App for MatrixApp {
             }
 			
 
-			// Draw geometric objects
+			// Draw Plane Object
 			if self.show_plane {
-			    if let Some((a, b, c, d)) = parse_plane_equation(&self.plane_equation) {
-			        // Create the plane equation in homogeneous coordinates
-			        let plane_normal = self.current.transpose() * Vector3::new(a, b, c);
-			        let plane_normal = plane_normal.normalize();
+				if let Some((a, b, c, d)) = parse_plane_equation(&self.plane_equation) {
+					// Transform the plane equation by the current matrix
+					// For a plane: ax + by + cz + d = 0
+					// Under transformation M, the new normal is (M^-1)^T * n
+					let normal = Vector3::new(a, b, c);
+					let transformed_normal = if let Some(inv) = self.current.try_inverse() {
+						(inv.transpose() * normal).normalize()
+					} else {
+						normal.normalize()
+					};
 				
-			        // Transform a point on the plane
-			        let point_on_plane = if a != 0.0 {
-			            Vector3::new(-d/a, 0.0, 0.0)
-			        } else if b != 0.0 {
-			            Vector3::new(0.0, -d/b, 0.0)
-			        } else {
-			            Vector3::new(0.0, 0.0, -d/c)
-			        };
-			        let transformed_point = self.current * point_on_plane;
+					// Find a point on the original plane and transform it
+					let point_on_plane = if a != 0.0 {
+						Vector3::new(-d/a, 0.0, 0.0)
+					} else if b != 0.0 {
+						Vector3::new(0.0, -d/b, 0.0)
+					} else {
+						Vector3::new(0.0, 0.0, -d/c)
+					};
+					let transformed_point = self.current * point_on_plane;
 				
-			        // Calculate new d value for the transformed plane
-			        let new_d = -plane_normal.dot(&transformed_point);
+					// Calculate new d value: d' = -n'·x'
+					let new_d = -transformed_normal.dot(&transformed_point);
 				
-			        draw_plane(
-			            &painter,
-			            &project,
-			            plane_normal.x, plane_normal.y, plane_normal.z, new_d,
-			            10.0,
-			            egui::Color32::from_rgba_unmultiplied(100, 200, 100, 100)
-			        );
-			    }
+					draw_plane(
+						&painter,
+						&project,
+						transformed_normal.x, transformed_normal.y, transformed_normal.z, new_d,
+						10.0,
+						egui::Color32::from_rgba_unmultiplied(100, 200, 100, 100)
+					);
+				}
 			}
 			
 			if self.show_line {
-			    if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
-			        let transformed_point = self.current * point;
-			        let transformed_direction = self.current * direction;
+				if let Some((point, direction)) = parse_line_equation(&self.line_equation) {
+					// Transform the line
+					let transformed_point = self.current * point;
+					let transformed_direction = self.current * direction;
 				
-			        draw_line(
-			            &painter,
-			            &project,
-			            transformed_point,
-			            transformed_direction,
-			            20.0,
-			            egui::Color32::from_rgba_unmultiplied(200, 100, 100, 200)
+					draw_line(
+						&painter,
+						&project,
+						transformed_point,
+						transformed_direction,
+						20.0,
+						egui::Color32::from_rgba_unmultiplied(200, 100, 100, 200)
+					);
+				}
+			}
+
+
+			// Draw intersection points if they exist
+			if self.show_plane && self.show_line {
+			    if let Some(intersection) = self.plane_line_intersection {
+			        let screen_pos = project(intersection);
+				
+			        // Draw intersection point (already in transformed space!)
+			        painter.circle_filled(screen_pos, 6.0, egui::Color32::YELLOW);
+			        painter.text(
+			            screen_pos + egui::vec2(10.0, -10.0),
+			            egui::Align2::LEFT_TOP,
+			            "Intersection",
+			            egui::FontId::proportional(12.0),
+			            egui::Color32::BLACK
+			        );
+			    }
+			}
+
+			if self.show_line {
+			    if let Some(closest) = self.closest_point {
+			        let screen_pos = project(closest);
+				
+			        // Draw closest point (already in transformed space!)
+			        painter.circle_filled(screen_pos, 5.0, egui::Color32::from_rgb(100, 200, 255));
+			        painter.text(
+			            screen_pos + egui::vec2(10.0, -10.0),
+			            egui::Align2::LEFT_TOP,
+			            "Closest to Origin",
+			            egui::FontId::proportional(12.0),
+			            egui::Color32::WHITE
 			        );
 			    }
 			}
